@@ -33,7 +33,7 @@
           <span id="tripCurrentLabel">Aucun voyage</span>
           <span class="trip-chevron">▾</span>
         </div>
-        <div class="trip-dropdown hidden" id="tripDropdown">
+        <div class="trip-dropdown" id="tripDropdown">
           <div id="tripList"></div>
           <button class="btn-add-trip" onclick="newTrip()">＋ Nouveau voyage</button>
         </div>
@@ -74,7 +74,7 @@
       <span class="mobile-title" id="mobileTitle">Infos voyage</span>
       <button class="mobile-trip-btn" onclick="toggleTripDropdown(); toggleSidebar()">✈️</button>
     </header>
-    <div class="sidebar-overlay hidden" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
     <!-- ===== MAIN CONTENT ===== -->
     <main class="main-content" id="mainContent">
@@ -478,7 +478,7 @@
         <div id="lieuxContainer"></div>
 
         <!-- Modal Ajouter lieu -->
-        <div class="modal hidden" id="modalAddLieu">
+        <div class="modal" id="modalAddLieu">
           <div class="modal-content">
             <div class="modal-header">
               <h3>📍 Ajouter un lieu</h3>
@@ -534,7 +534,7 @@
         <div id="budgetContainer"></div>
 
         <!-- Modal dépense -->
-        <div class="modal hidden" id="modalAddDepense">
+        <div class="modal" id="modalAddDepense">
           <div class="modal-content">
             <div class="modal-header">
               <h3>💶 Ajouter une dépense</h3>
@@ -580,10 +580,10 @@
     </main><!-- end main-content -->
 
     <!-- Toast notification -->
-    <div class="toast hidden" id="toast"></div>
+    <div class="toast" id="toast"></div>
 
     <!-- Modal nouveau voyage -->
-    <div class="modal hidden" id="modalNewTrip">
+    <div class="modal" id="modalNewTrip">
       <div class="modal-content modal-sm">
         <div class="modal-header">
           <h3>✈️ Nouveau voyage</h3>
