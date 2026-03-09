@@ -2,8 +2,8 @@
    JE PRÉPARE MON VOYAGE – app.js  (v2)
    ============================================================ */
 
-// ── STATE ──────────────────────────────────────────────────
-let state = {
+// ── STATE (var global, jamais réassigné – mutation directe) ────
+var state = {
   trips: [],
   currentTripId: null,
   currentPage: 'infos',
@@ -15,14 +15,23 @@ function save() {
 }
 function load() {
   try {
-    const raw = localStorage.getItem('jpmv_state');
-    if (raw) state = { ...state, ...JSON.parse(raw) };
+    var raw = localStorage.getItem('jpmv_state');
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    // Mutation directe – on ne réassigne JAMAIS state
+    if (Array.isArray(parsed.trips)) state.trips = parsed.trips;
+    if (parsed.currentTripId !== undefined) state.currentTripId = parsed.currentTripId;
+    if (parsed.currentPage) state.currentPage = parsed.currentPage;
   } catch(e) { console.warn('Load error', e); }
 }
 
 // ── CURRENT TRIP ───────────────────────────────────────────
 function currentTrip() {
-  return state.trips.find(t => t.id === state.currentTripId) || null;
+  if (!state.currentTripId) return null;
+  for (var i = 0; i < state.trips.length; i++) {
+    if (state.trips[i].id === state.currentTripId) return state.trips[i];
+  }
+  return null;
 }
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -129,6 +138,29 @@ function renderTripList() {
 function renderTripSelector() {
   var trip = currentTrip();
   document.getElementById('tripCurrentLabel').textContent = trip ? trip.name : 'Aucun voyage';
+  // Mettre à jour le label sous le titre de la page infos
+  var lbl = document.getElementById('tripActiveLabel');
+  if (lbl) {
+    if (trip) {
+      lbl.textContent = '✈️ Voyage actif : ' + trip.name;
+      lbl.style.display = 'block';
+    } else {
+      lbl.style.display = 'none';
+    }
+  }
+}
+
+function resetAllData() {
+  if (!confirm('⚠️ Supprimer TOUTES les données et repartir de zéro ?\n\nCette action est irréversible.')) return;
+  localStorage.removeItem('jpmv_state');
+  state.trips = [];
+  state.currentTripId = null;
+  state.currentPage = 'infos';
+  renderTripSelector();
+  renderTripList();
+  loadCurrentTrip();
+  navigate('infos');
+  toast('🗑️ Données réinitialisées', 'success');
 }
 
 // ── NAVIGATION ─────────────────────────────────────────────
@@ -186,6 +218,12 @@ var INFO_FIELDS = [
 
 function saveInfos() {
   var trip = currentTrip();
+  // Fallback : si aucun voyage sélectionné mais qu'il en existe un, le prendre
+  if (!trip && state.trips.length > 0) {
+    state.currentTripId = state.trips[0].id;
+    trip = state.trips[0];
+    renderTripSelector();
+  }
   if (!trip) { toast('Créez d\'abord un voyage ✈️', 'error'); return; }
   INFO_FIELDS.forEach(function(id) {
     var el = document.getElementById(id);
@@ -1218,6 +1256,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   renderTripSelector();
   renderTripList();
+
+  // Cohérence : si currentTripId ne correspond à aucun trip, corriger
+  if (state.currentTripId) {
+    var found = false;
+    for (var i = 0; i < state.trips.length; i++) {
+      if (state.trips[i].id === state.currentTripId) { found = true; break; }
+    }
+    if (!found) state.currentTripId = state.trips.length > 0 ? state.trips[0].id : null;
+  }
 
   if (state.trips.length > 0) {
     if (!state.currentTripId) state.currentTripId = state.trips[0].id;

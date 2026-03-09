@@ -85,8 +85,12 @@
           <div>
             <h1>🗺️ Infos voyage</h1>
             <p class="subtitle" id="infosSubtitle">Renseignez les informations de votre voyage</p>
+            <p id="tripActiveLabel" style="font-size:0.78rem;color:var(--primary);margin-top:4px;font-weight:600;display:none;"></p>
           </div>
-          <button class="btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+          <div class="header-actions">
+            <button class="btn-secondary" onclick="resetAllData()" title="Vider toutes les données (debug)">🗑️ Reset</button>
+            <button class="btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+          </div>
         </div>
 
         <div class="cards-grid">
