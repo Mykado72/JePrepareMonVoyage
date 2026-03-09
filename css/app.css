@@ -316,7 +316,6 @@ textarea { resize: vertical; min-height: 70px; }
 .doc-field-value { font-size: 0.9rem; color: var(--text); font-weight: 500; }
 .doc-field-value.empty { color: var(--text3); font-style: italic; }
 .doc-field-value.link a { color: var(--primary); }
-.info-missing { display: flex; align-items: center; gap: 10px; padding: 20px; background: rgba(255,152,0,0.1); border: 1px solid rgba(255,152,0,0.3); border-radius: var(--radius); color: var(--warning); font-size: 0.875rem; }
 
 /* === À VISITER === */
 .visiter-filters {
@@ -401,10 +400,8 @@ textarea { resize: vertical; min-height: 70px; }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
-/* === HIDDEN === */
+/* === HIDDEN (utility, not used for pages) === */
 .hidden { display: none !important; }
-.page { display: none; }
-.page.active { display: block; }
 
 /* === RESPONSIVE === */
 @media (max-width: 768px) {

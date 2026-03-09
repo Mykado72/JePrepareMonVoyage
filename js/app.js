@@ -1,60 +1,78 @@
 /* ============================================================
-   JE PRÉPARE MON VOYAGE – app.js
+   JE PRÉPARE MON VOYAGE – app.js  (v2)
    ============================================================ */
 
 // ── STATE ──────────────────────────────────────────────────
 let state = {
-  trips: [],          // [{id, name, infos:{}, checklist:[], bagages:[], lieux:[], depenses:[]}]
+  trips: [],
   currentTripId: null,
   currentPage: 'infos',
 };
 
-// ── HELPERS ────────────────────────────────────────────────
+// ── PERSISTENCE ────────────────────────────────────────────
 function save() {
   localStorage.setItem('jpmv_state', JSON.stringify(state));
 }
-
 function load() {
-  const raw = localStorage.getItem('jpmv_state');
-  if (raw) {
-    try { state = Object.assign(state, JSON.parse(raw)); } catch(e) {}
-  }
+  try {
+    const raw = localStorage.getItem('jpmv_state');
+    if (raw) state = { ...state, ...JSON.parse(raw) };
+  } catch(e) { console.warn('Load error', e); }
 }
 
+// ── CURRENT TRIP ───────────────────────────────────────────
 function currentTrip() {
   return state.trips.find(t => t.id === state.currentTripId) || null;
 }
-
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-function toast(msg, type = '') {
+// ── TOAST ──────────────────────────────────────────────────
+function toast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = `toast${type ? ' ' + type : ''}`;
-  el.classList.remove('hidden');
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => el.classList.add('hidden'), 3000);
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(function() { el.style.display = 'none'; }, 3000);
 }
 
-function showEl(id) { const e = document.getElementById(id); if(e) e.style.display = ''; }
-function hideEl(id) { const e = document.getElementById(id); if(e) e.style.display = 'none'; }
+// ── UTILS ──────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDate(d) {
+  if (!d) return '';
+  var parts = d.split('-');
+  return parts[2] + '/' + parts[1] + '/' + parts[0];
+}
+function nbNuits(d1, d2) {
+  if (!d1 || !d2) return 0;
+  return Math.max(0, Math.round((new Date(d2) - new Date(d1)) / 86400000));
+}
+function fmt(n) {
+  return Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
-// ── TRIPS ──────────────────────────────────────────────────
+// ── TRIPS MANAGEMENT ───────────────────────────────────────
 function newTrip() {
   closeDropdown();
   document.getElementById('newTripName').value = '';
   openModal('modalNewTrip');
-  setTimeout(() => document.getElementById('newTripName').focus(), 100);
+  setTimeout(function() { document.getElementById('newTripName').focus(); }, 100);
 }
 
 function confirmNewTrip() {
-  const name = document.getElementById('newTripName').value.trim();
+  var name = document.getElementById('newTripName').value.trim();
   if (!name) { toast('Donnez un nom au voyage', 'error'); return; }
-  const trip = {
-    id: genId(), name,
-    infos: {}, checklist: [], bagages: defaultBagages(), lieux: [], depenses: []
+  var trip = {
+    id: genId(), name: name,
+    infos: {},
+    checklist: [],
+    bagages: defaultBagages(),
+    lieux: [],
+    depenses: []
   };
   state.trips.push(trip);
   state.currentTripId = trip.id;
@@ -75,45 +93,46 @@ function selectTrip(id) {
 
 function deleteTrip(id, e) {
   e.stopPropagation();
-  if (!confirm('Supprimer ce voyage ?')) return;
-  state.trips = state.trips.filter(t => t.id !== id);
-  if (state.currentTripId === id) state.currentTripId = state.trips[0]?.id || null;
+  if (!confirm('Supprimer ce voyage et toutes ses données ?')) return;
+  state.trips = state.trips.filter(function(t) { return t.id !== id; });
+  if (state.currentTripId === id) state.currentTripId = state.trips[0] ? state.trips[0].id : null;
   save();
   renderTripSelector();
   loadCurrentTrip();
 }
 
 function toggleTripDropdown() {
-  const dd = document.getElementById('tripDropdown');
-  dd.classList.toggle('hidden');
-  if (!dd.classList.contains('hidden')) renderTripList();
+  var dd = document.getElementById('tripDropdown');
+  var hidden = dd.style.display === 'none' || dd.style.display === '';
+  dd.style.display = hidden ? 'block' : 'none';
+  if (hidden) renderTripList();
 }
 
 function closeDropdown() {
-  document.getElementById('tripDropdown').classList.add('hidden');
+  document.getElementById('tripDropdown').style.display = 'none';
 }
 
 function renderTripList() {
-  const container = document.getElementById('tripList');
-  if (state.trips.length === 0) {
+  var container = document.getElementById('tripList');
+  if (!state.trips.length) {
     container.innerHTML = '<div style="padding:10px 14px;font-size:0.85rem;color:var(--text3)">Aucun voyage</div>';
     return;
   }
-  container.innerHTML = state.trips.map(t => `
-    <div class="trip-option${t.id === state.currentTripId ? ' active' : ''}" onclick="selectTrip('${t.id}')">
-      <span>✈️ ${escHtml(t.name)}</span>
-      <span class="trip-option-del" onclick="deleteTrip('${t.id}',event)">✕</span>
-    </div>
-  `).join('');
+  container.innerHTML = state.trips.map(function(t) {
+    return '<div class="trip-option' + (t.id === state.currentTripId ? ' active' : '') + '" onclick="selectTrip(\'' + t.id + '\')">' +
+      '<span>✈️ ' + escHtml(t.name) + '</span>' +
+      '<span class="trip-option-del" onclick="deleteTrip(\'' + t.id + '\',event)">✕</span>' +
+      '</div>';
+  }).join('');
 }
 
 function renderTripSelector() {
-  const trip = currentTrip();
+  var trip = currentTrip();
   document.getElementById('tripCurrentLabel').textContent = trip ? trip.name : 'Aucun voyage';
 }
 
 // ── NAVIGATION ─────────────────────────────────────────────
-const PAGE_TITLES = {
+var PAGE_TITLES = {
   infos: '🗺️ Infos voyage', checklist: '✅ Checklist',
   bagages: '🧳 Bagages', documents: '📄 Documents',
   visiter: '📍 À visiter', budget: '💶 Budget'
@@ -121,34 +140,37 @@ const PAGE_TITLES = {
 
 function navigate(page) {
   state.currentPage = page;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => {
+  document.querySelectorAll('.page').forEach(function(p) {
+    p.style.display = (p.id === 'page-' + page) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(function(n) {
     n.classList.toggle('active', n.dataset.page === page);
   });
-  document.getElementById('mobileTitle').textContent = PAGE_TITLES[page] || page;
+  var titleEl = document.getElementById('mobileTitle');
+  if (titleEl) titleEl.textContent = PAGE_TITLES[page] || page;
   closeSidebar();
+  closeDropdown();
 
   if (page === 'checklist') refreshChecklist();
-  if (page === 'bagages') renderBagages();
-  if (page === 'documents') renderDocuments();
-  if (page === 'visiter') renderLieux();
-  if (page === 'budget') renderBudget();
+  else if (page === 'bagages') renderBagages();
+  else if (page === 'documents') renderDocuments();
+  else if (page === 'visiter') renderLieux();
+  else if (page === 'budget') renderBudget();
 }
 
 function toggleSidebar() {
-  const sb = document.getElementById('sidebar');
-  const ov = document.getElementById('sidebarOverlay');
-  sb.classList.toggle('open');
-  ov.classList.toggle('hidden', !sb.classList.contains('open'));
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sidebarOverlay');
+  var open = sb.classList.toggle('open');
+  ov.style.display = open ? 'block' : 'none';
 }
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.add('hidden');
+  document.getElementById('sidebarOverlay').style.display = 'none';
 }
 
-// ── INFOS ──────────────────────────────────────────────────
-const INFO_FIELDS = [
+// ── INFOS FIELDS ───────────────────────────────────────────
+var INFO_FIELDS = [
   'infoPays','infoVille','infoDateDepart','infoDateRetour','infoNbVoyageurs',
   'infoTypeHebergement','infoNomHebergement','infoAdresseHebergement','infoTelHebergement',
   'infoRefHebergement','infoLienHebergement',
@@ -162,310 +184,474 @@ const INFO_FIELDS = [
 ];
 
 function saveInfos() {
-  const trip = currentTrip();
-  if (!trip) { toast('Créez d\'abord un voyage', 'error'); return; }
-  INFO_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
+  var trip = currentTrip();
+  if (!trip) { toast('Créez d\'abord un voyage ✈️', 'error'); return; }
+  INFO_FIELDS.forEach(function(id) {
+    var el = document.getElementById(id);
     if (el) trip.infos[id] = el.value;
   });
   save();
   updateSubtitle();
+  updateNuitsDisplay();
   updateBadges();
   toast('💾 Informations enregistrées', 'success');
 }
 
 function loadCurrentTrip() {
-  const trip = currentTrip();
-  INFO_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
+  var trip = currentTrip();
+  INFO_FIELDS.forEach(function(id) {
+    var el = document.getElementById(id);
     if (el) el.value = trip ? (trip.infos[id] || '') : '';
   });
   updateSubtitle();
-  if (state.currentPage === 'checklist') refreshChecklist();
-  if (state.currentPage === 'bagages') renderBagages();
-  if (state.currentPage === 'documents') renderDocuments();
-  if (state.currentPage === 'visiter') renderLieux();
-  if (state.currentPage === 'budget') renderBudget();
+  updateNuitsDisplay();
   updateBadges();
+  var p = state.currentPage;
+  if (p === 'checklist') refreshChecklist();
+  else if (p === 'bagages') renderBagages();
+  else if (p === 'documents') renderDocuments();
+  else if (p === 'visiter') renderLieux();
+  else if (p === 'budget') renderBudget();
 }
 
 function updateSubtitle() {
-  const trip = currentTrip();
-  const el = document.getElementById('infosSubtitle');
-  if (!trip) { el.textContent = 'Créez un voyage pour commencer'; return; }
-  const pays = trip.infos.infoPays || '';
-  const ville = trip.infos.infoVille || '';
-  const d1 = trip.infos.infoDateDepart ? formatDate(trip.infos.infoDateDepart) : '';
-  const d2 = trip.infos.infoDateRetour ? formatDate(trip.infos.infoDateRetour) : '';
-  let txt = [ville, pays].filter(Boolean).join(', ');
+  var trip = currentTrip();
+  var el = document.getElementById('infosSubtitle');
+  if (!el) return;
+  if (!trip) { el.textContent = 'Créez votre premier voyage pour commencer'; return; }
+  var pays = trip.infos.infoPays || '';
+  var ville = trip.infos.infoVille || '';
+  var d1 = trip.infos.infoDateDepart ? formatDate(trip.infos.infoDateDepart) : '';
+  var d2 = trip.infos.infoDateRetour ? formatDate(trip.infos.infoDateRetour) : '';
+  var txt = [ville, pays].filter(Boolean).join(', ');
   if (d1) txt += (txt ? ' · ' : '') + d1 + (d2 ? ' → ' + d2 : '');
   el.textContent = txt || 'Renseignez les informations de votre voyage';
 }
 
-function updateChecklistOnChange() { /* will re-gen on navigate */ }
-function updateHebergementUI() {}
-function updateTransportUI(dir) {}
+// ── NUITS DYNAMIQUES ───────────────────────────────────────
+function updateNuitsDisplay() {
+  var d1El = document.getElementById('infoDateDepart');
+  var d2El = document.getElementById('infoDateRetour');
+  var el = document.getElementById('nuitsDisplay');
+  if (!el) return;
+  var d1 = d1El ? d1El.value : '';
+  var d2 = d2El ? d2El.value : '';
+  var n = nbNuits(d1, d2);
+  if (d1 && d2 && n > 0) {
+    el.textContent = '🌙 ' + n + ' nuit' + (n > 1 ? 's' : '');
+    el.style.display = 'inline-flex';
+  } else {
+    el.style.display = 'none';
+  }
+}
 
+// ── BADGES ─────────────────────────────────────────────────
 function updateBadges() {
-  const trip = currentTrip();
-  if (!trip) { hideBadge('badgeChecklist'); hideBadge('badgeBagages'); return; }
-  const clTodo = (trip.checklist || []).filter(i => !i.done).length;
-  const bgTodo = (trip.bagages || []).filter(i => !i.packed).length;
+  var trip = currentTrip();
+  if (!trip) { clearBadge('badgeChecklist'); clearBadge('badgeBagages'); return; }
+  var clTodo = (trip.checklist || []).filter(function(i) { return !i.done; }).length;
+  var bgTodo = (trip.bagages  || []).filter(function(i) { return !i.packed; }).length;
   setBadge('badgeChecklist', clTodo);
   setBadge('badgeBagages', bgTodo);
 }
 function setBadge(id, n) {
-  const el = document.getElementById(id);
+  var el = document.getElementById(id);
   if (!el) return;
-  if (n > 0) { el.textContent = n; el.classList.add('visible'); }
-  else el.classList.remove('visible');
+  if (n > 0) { el.textContent = n; el.style.display = 'inline-block'; }
+  else el.style.display = 'none';
 }
-function hideBadge(id) { document.getElementById(id)?.classList.remove('visible'); }
+function clearBadge(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+// ── AUTOCOMPLETE ───────────────────────────────────────────
+var PAYS_LIST = [
+  'Afghanistan','Afrique du Sud','Albanie','Algérie','Allemagne','Andorre','Angola',
+  'Arabie Saoudite','Argentine','Arménie','Australie','Autriche','Azerbaïdjan',
+  'Bahamas','Bahreïn','Bangladesh','Belgique','Bénin','Bolivie','Bosnie-Herzégovine',
+  'Brésil','Bulgarie','Burkina Faso','Cambodge','Cameroun','Canada','Chili','Chine',
+  'Chypre','Colombie','Congo','Corée du Sud','Costa Rica',"Côte d'Ivoire",'Croatie',
+  'Cuba','Danemark','Égypte','Émirats Arabes Unis','Équateur','Espagne','Estonie',
+  'États-Unis','Éthiopie','Finlande','France','Gabon','Géorgie','Ghana','Grèce',
+  'Guatemala','Honduras','Hongrie','Inde','Indonésie','Irak','Iran','Irlande',
+  'Islande','Israël','Italie','Jamaïque','Japon','Jordanie','Kazakhstan','Kenya',
+  'Laos','Lettonie','Liban','Liechtenstein','Lituanie','Luxembourg','Madagascar',
+  'Malaisie','Maldives','Mali','Malte','Maroc','Maurice','Mexique','Monaco',
+  'Mongolie','Monténégro','Mozambique','Myanmar','Namibie','Népal','Nicaragua',
+  'Niger','Nigéria','Norvège','Nouvelle-Zélande','Oman','Ouzbékistan','Pakistan',
+  'Panama','Paraguay','Pays-Bas','Pérou','Philippines','Pologne','Portugal','Qatar',
+  'République Dominicaine','République Tchèque','Roumanie','Royaume-Uni','Russie',
+  'Rwanda','Saint-Marin','Sénégal','Serbie','Singapour','Slovaquie','Slovénie',
+  'Sri Lanka','Suède','Suisse','Taiwan','Tanzanie','Thaïlande','Togo','Tunisie',
+  'Turquie','Ukraine','Uruguay','Vatican','Venezuela','Vietnam','Zimbabwe'
+];
+
+var VILLES_LIST = [
+  'Abidjan','Abou Dabi','Accra','Agadir','Alger','Alicante','Amsterdam','Athènes',
+  'Atlanta','Auckland','Bangkok','Barcelone','Beijing','Beyrouth','Bogotá','Bordeaux',
+  'Bruxelles','Budapest','Buenos Aires','Cancún','Cape Town','Casablanca','Chicago',
+  'Copenhague','Dakar','Doha','Dubai','Dublin','Édimbourg','Florence','Francfort',
+  'Genève','Hong Kong','Istanbul','Jakarta','Johannesburg','Kuala Lumpur','Lagos',
+  'Lima','Lisbonne','Londres','Los Angeles','Lyon','Madrid','Malaga','Marrakech',
+  'Marseille','Miami','Milan','Montréal','Moscou','Mumbai','Munich','Nairobi',
+  'Naples','New York','Nice','Oslo','Palma de Majorque','Paris','Prague','Québec',
+  'Rabat','Reykjavik','Rio de Janeiro','Rome','Saint-Pétersbourg','Santiago',
+  'São Paulo','Séoul','Séville','Shanghai','Singapour','Stockholm','Sydney',
+  'Tenerife','Tokyo','Toronto','Tunis','Valence','Vancouver','Varsovie','Vienne',
+  'Zurich'
+];
+
+var AEROPORTS_LIST = [
+  'CDG – Paris Charles-de-Gaulle','ORY – Paris Orly','LYS – Lyon Saint-Exupéry',
+  'NCE – Nice Côte d\'Azur','MRS – Marseille Provence','TLS – Toulouse Blagnac',
+  'BOD – Bordeaux Mérignac','NTE – Nantes Atlantique','BSL – Bâle Mulhouse',
+  'SXB – Strasbourg Entzheim','LIL – Lille Lesquin','RNS – Rennes',
+  'FCO – Rome Fiumicino','MXP – Milan Malpensa','VCE – Venise Marco Polo',
+  'BCN – Barcelone El Prat','MAD – Madrid Barajas','AGP – Malaga',
+  'PMI – Palma de Majorque','LHR – Londres Heathrow','LGW – Londres Gatwick',
+  'AMS – Amsterdam Schiphol','FRA – Francfort','MUC – Munich','BER – Berlin Brandenburg',
+  'ZRH – Zurich','GVA – Genève','BRU – Bruxelles Zaventem','VIE – Vienne',
+  'ATH – Athènes','IST – Istanbul','DXB – Dubai','DOH – Doha','AUH – Abu Dhabi',
+  'JFK – New York Kennedy','LAX – Los Angeles','MIA – Miami','ORD – Chicago O\'Hare',
+  'YUL – Montréal Trudeau','YYZ – Toronto Pearson','GRU – São Paulo Guarulhos',
+  'NRT – Tokyo Narita','HND – Tokyo Haneda','ICN – Séoul Incheon',
+  'PEK – Beijing Capital','PVG – Shanghai Pudong','HKG – Hong Kong',
+  'SIN – Singapour Changi','BKK – Bangkok Suvarnabhumi','KUL – Kuala Lumpur',
+  'SYD – Sydney Kingsford','AKL – Auckland','JNB – Johannesburg',
+  'CMN – Casablanca Mohammed V','CAI – Le Caire','NBO – Nairobi',
+  'CPT – Cape Town','RAK – Marrakech Menara','TUN – Tunis Carthage','ALG – Alger Houari Boumediene'
+];
+
+function normalizeStr(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function setupAutocomplete(inputId, list, maxItems) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  maxItems = maxItems || 8;
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  var dd = document.createElement('div');
+  dd.style.cssText = [
+    'display:none','position:absolute','top:100%','left:0','right:0','z-index:500',
+    'background:var(--surface2)','border:1.5px solid var(--primary)',
+    'border-top:none','border-radius:0 0 8px 8px',
+    'max-height:200px','overflow-y:auto','box-shadow:0 8px 24px rgba(0,0,0,0.5)'
+  ].join(';');
+  wrap.appendChild(dd);
+
+  function show(val) {
+    if (!val || val.length < 1) { dd.style.display = 'none'; return; }
+    var q = normalizeStr(val);
+    var matches = list.filter(function(item) {
+      return normalizeStr(item).indexOf(q) !== -1;
+    }).slice(0, maxItems);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(function(m) {
+      var norm = normalizeStr(m);
+      var idx = norm.indexOf(q);
+      var display = idx >= 0
+        ? escHtml(m.slice(0, idx)) + '<strong style="color:var(--primary)">' + escHtml(m.slice(idx, idx + val.length)) + '</strong>' + escHtml(m.slice(idx + val.length))
+        : escHtml(m);
+      return '<div style="padding:9px 14px;cursor:pointer;font-size:0.875rem;border-bottom:1px solid var(--border-light);transition:background 0.1s" ' +
+        'onmouseover="this.style.background=\'var(--surface)\'" ' +
+        'onmouseout="this.style.background=\'\'" ' +
+        'onmousedown="pickAC(event,\'' + inputId + '\',\'' + escHtml(m) + '\')">' + display + '</div>';
+    }).join('');
+    dd.style.display = 'block';
+  }
+
+  input.addEventListener('input', function() { show(input.value); });
+  input.addEventListener('focus', function() { show(input.value); });
+  input.addEventListener('blur', function() { setTimeout(function() { dd.style.display = 'none'; }, 200); });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') dd.style.display = 'none';
+  });
+}
+
+function pickAC(e, inputId, val) {
+  e.preventDefault();
+  var input = document.getElementById(inputId);
+  if (input) input.value = val;
+  // trigger nuits update if dates
+  if (inputId === 'infoDateDepart' || inputId === 'infoDateRetour') updateNuitsDisplay();
+}
+
+function initAutocompletes() {
+  setupAutocomplete('infoPays', PAYS_LIST, 8);
+  setupAutocomplete('infoVille', VILLES_LIST, 10);
+  setupAutocomplete('infoAeroportDepart', AEROPORTS_LIST, 8);
+  setupAutocomplete('infoAeroportArrivee', AEROPORTS_LIST, 8);
+}
 
 // ── CHECKLIST ──────────────────────────────────────────────
 function buildChecklist(infos) {
   infos = infos || {};
-  const pays = (infos.infoPays || '').toLowerCase();
-  const transportAller = infos.infoTransportAller || '';
-  const locationVoiture = infos.infoLocationVoiture || 'non';
-  const parking = infos.infoParkingReserve || 'non';
-  const bagCabine = infos.infoBagageCabine || 'aucun';
-  const bagSoute = infos.infoBagageSoute || 'aucun';
+  var pays = normalizeStr(infos.infoPays || '');
+  var transport = infos.infoTransportAller || '';
+  var location = infos.infoLocationVoiture || 'non';
+  var parking = infos.infoParkingReserve || 'non';
+  var bagCabine = infos.infoBagageCabine || 'aucun';
+  var bagSoute = infos.infoBagageSoute || 'aucun';
 
-  // Detect if Schengen (simplified list of EU/Schengen countries)
-  const schengen = ['france','espagne','italie','allemagne','portugal','pays-bas','belgique','autriche','suisse','grèce','pologne','tchéquie','hongrie','slovaquie','slovénie','croatie','estonie','lettonie','lituanie','luxembourg','malte','danemark','suède','finlande','norvège','islande','liechtenstein','andorre','monaco'];
-  const isSchengen = schengen.some(p => pays.includes(p));
-  const needsPassport = !isSchengen && pays !== '';
+  var schengen = ['france','espagne','italie','allemagne','portugal','pays-bas','belgique',
+    'autriche','suisse','grece','pologne','tcheque','hongrie','slovaquie','slovenie',
+    'croatie','estonie','lettonie','lituanie','luxembourg','malte','danemark','suede',
+    'finlande','norvege','islande','liechtenstein','andorre','monaco'];
+  var isSchengen = schengen.some(function(p) { return pays.indexOf(p) !== -1; });
+  var needsPassport = pays !== '' && !isSchengen;
 
-  const groups = [
+  var groups = [
     {
-      id: 'docs', icon: '📄', title: 'Documents & Identité', items: [
-        { id: 'id_doc', text: needsPassport ? '🛂 Passeport valide (min. 6 mois de validité)' : '🪪 Carte d\'identité ou passeport valide', priority: 'high' },
-        ...(needsPassport ? [{ id: 'visa', text: '📋 Vérifier si visa requis pour ' + (infos.infoPays || 'ce pays'), priority: 'high' }] : []),
-        { id: 'copies_id', text: '📸 Copie/photo des documents d\'identité', priority: 'medium' },
-        ...(locationVoiture === 'oui' ? [{ id: 'permis', text: '🚗 Permis de conduire (original)', priority: 'high' }] : []),
-      ]
+      id: 'docs', icon: '📄', title: 'Documents & Identité',
+      items: [
+        { id: 'id_doc', text: needsPassport ? '🛂 Passeport valide (validité min. 6 mois)' : '🪪 Carte d\'identité ou passeport valide', priority: 'high' },
+        needsPassport ? { id: 'visa', text: '📋 Vérifier si visa requis pour ' + (infos.infoPays || 'ce pays'), priority: 'high' } : null,
+        { id: 'copies_id', text: '📸 Photocopies / photos des documents d\'identité', priority: 'medium' },
+        location === 'oui' ? { id: 'permis', text: '🚗 Permis de conduire (original)', priority: 'high' } : null,
+      ].filter(Boolean)
     },
     {
-      id: 'transport', icon: '✈️', title: 'Transport & Billets', items: [
-        ...(transportAller === 'avion' ? [
-          { id: 'billet_avion', text: '🎫 Billets d\'avion aller imprimés / sur téléphone', priority: 'high' },
-          { id: 'carte_embarquement', text: '🗂️ Carte d\'embarquement (check-in en ligne)', priority: 'high' },
-          { id: 'liquides', text: '💧 Liquides en cabine : contenants ≤100ml en sac zip', priority: 'medium' },
-          { id: 'aeroport_heure', text: '⏰ Arrivée à l\'aéroport 2h avant le départ', priority: 'high' },
-        ] : []),
-        ...(transportAller === 'train' ? [
-          { id: 'billet_train', text: '🎫 Billets de train téléchargés / imprimés', priority: 'high' },
-        ] : []),
-        { id: 'billet_retour', text: '🔁 Billets retour vérifiés', priority: 'medium' },
-      ]
+      id: 'transport', icon: '✈️', title: 'Transport & Billets',
+      items: [
+        transport === 'avion' ? { id: 'billet_avion', text: '🎫 Billets d\'avion aller imprimés / sur mobile', priority: 'high' } : null,
+        transport === 'avion' ? { id: 'carte_embarquement', text: '🗂️ Carte d\'embarquement (check-in en ligne)', priority: 'high' } : null,
+        transport === 'avion' ? { id: 'liquides', text: '💧 Liquides cabine : flacons ≤ 100ml dans sac zip', priority: 'medium' } : null,
+        transport === 'avion' ? { id: 'aeroport_heure', text: '⏰ Arriver à l\'aéroport 2h avant le vol', priority: 'high' } : null,
+        transport === 'train' ? { id: 'billet_train', text: '🚄 Billets de train téléchargés / imprimés', priority: 'high' } : null,
+        { id: 'billet_retour', text: '🔁 Billets retour vérifiés et accessibles', priority: 'medium' },
+      ].filter(Boolean)
     },
     {
-      id: 'hebergement', icon: '🏨', title: 'Hébergement', items: [
+      id: 'hebergement', icon: '🏨', title: 'Hébergement',
+      items: [
         { id: 'resa_hotel', text: '🏨 Confirmation de réservation hébergement', priority: 'high' },
         { id: 'adresse_hotel', text: '📍 Adresse hébergement notée / enregistrée', priority: 'medium' },
-        { id: 'check_in', text: '🔑 Horaires check-in / check-out vérifiés', priority: 'low' },
+        { id: 'check_in', text: '🔑 Horaires check-in / check-out confirmés', priority: 'low' },
       ]
     },
     {
-      id: 'parking_section', icon: '🅿️', title: 'Parking & Transfert', items: [
-        ...(parking === 'oui' ? [{ id: 'parking_resa', text: '🅿️ Réservation parking confirmée', priority: 'high' }] : []),
-        ...(parking !== 'non' ? [{ id: 'transfert', text: '🚌 Transfert / navette aéroport organisé', priority: 'medium' }] : []),
-        { id: 'trajet_aeroport', text: '🗺️ Itinéraire vers l\'aéroport planifié', priority: 'medium' },
-      ]
+      id: 'parking_section', icon: '🅿️', title: 'Parking & Transfert',
+      items: [
+        parking === 'oui' ? { id: 'parking_resa', text: '🅿️ Réservation parking confirmée', priority: 'high' } : null,
+        (parking === 'navette' || parking === 'taxi') ? { id: 'transfert', text: '🚌 Transfert / navette aéroport organisé', priority: 'medium' } : null,
+        { id: 'trajet_aeroport', text: '🗺️ Itinéraire vers aéroport / gare planifié', priority: 'medium' },
+      ].filter(Boolean)
     },
     {
-      id: 'location_section', icon: '🚗', title: 'Location de véhicule', items: locationVoiture === 'oui' ? [
+      id: 'location_section', icon: '🚗', title: 'Location de véhicule',
+      items: location === 'oui' ? [
         { id: 'location_resa', text: '🚗 Réservation location de voiture confirmée', priority: 'high' },
         { id: 'location_assurance', text: '🛡️ Assurance véhicule de location vérifiée', priority: 'high' },
-        { id: 'gps', text: '📱 GPS / carte hors ligne téléchargés', priority: 'medium' },
+        { id: 'gps', text: '📱 GPS / cartes hors ligne téléchargées', priority: 'medium' },
       ] : []
     },
     {
-      id: 'bagages_section', icon: '🧳', title: 'Préparation des bagages', items: [
-        ...(bagSoute !== 'aucun' ? [{ id: 'poids_soute', text: `⚖️ Poids valise soute vérifié (max ${bagSoute})`, priority: 'high' }] : []),
-        ...(bagCabine !== 'aucun' ? [{ id: 'poids_cabine', text: '⚖️ Poids bagage cabine vérifié', priority: 'high' }] : []),
+      id: 'bagages_section', icon: '🧳', title: 'Préparation des bagages',
+      items: [
+        bagSoute !== 'aucun' ? { id: 'poids_soute', text: '⚖️ Poids valise soute vérifié (max ' + bagSoute + ')', priority: 'high' } : null,
+        bagCabine !== 'aucun' ? { id: 'poids_cabine', text: '⚖️ Poids bagage cabine vérifié', priority: 'high' } : null,
         { id: 'bagages_prepares', text: '🧳 Bagages préparés et vérifiés', priority: 'high' },
-        { id: 'cadenas', text: '🔒 Cadenas TSA sur valise (si soute)', priority: 'low' },
+        { id: 'cadenas', text: '🔒 Cadenas TSA sur valise soute', priority: 'low' },
         { id: 'etiquette', text: '🏷️ Étiquette bagage avec coordonnées', priority: 'medium' },
-      ]
+      ].filter(Boolean)
     },
     {
-      id: 'sante', icon: '🏥', title: 'Santé & Assurance', items: [
-        { id: 'assurance', text: '🛡️ Assurance voyage souscrite / carte bleue vérifiée', priority: 'high' },
-        { id: 'carte_vitale', text: '💳 Carte Vitale / CEAM (si Europe)', priority: 'medium' },
+      id: 'sante', icon: '🏥', title: 'Santé & Assurance',
+      items: [
+        { id: 'assurance', text: '🛡️ Assurance voyage souscrite / CB vérifiée', priority: 'high' },
+        { id: 'carte_vitale', text: '💳 Carte Vitale / CEAM (Europe)', priority: 'medium' },
         { id: 'pharmacie', text: '💊 Trousse à pharmacie préparée', priority: 'medium' },
-        { id: 'ordonnances', text: '📋 Ordonnances médicaments en quantité suffisante', priority: needsPassport ? 'high' : 'medium' },
+        { id: 'ordonnances', text: '📋 Ordonnances en quantité suffisante', priority: 'medium' },
       ]
     },
     {
-      id: 'pratique', icon: '📱', title: 'Divers & Pratique', items: [
-        { id: 'monnaie', text: '💵 Change ou carte acceptée à destination', priority: 'medium' },
+      id: 'pratique', icon: '📱', title: 'Divers & Pratique',
+      items: [
+        { id: 'monnaie', text: '💵 Monnaie locale / carte bancaire acceptée', priority: 'medium' },
         { id: 'roaming', text: '📶 Forfait téléphone / roaming activé', priority: 'medium' },
-        { id: 'chargeurs', text: '🔌 Chargeurs & adaptateur électrique', priority: 'medium' },
-        { id: 'photos_maison', text: '📸 Photos maison / appartement en ordre', priority: 'low' },
-        { id: 'voisin_plantes', text: '🌿 Voisin prévenu (plantes, courrier, animaux)', priority: 'low' },
+        { id: 'chargeurs', text: '🔌 Chargeurs + adaptateur électrique', priority: 'medium' },
+        { id: 'maison', text: '🏠 Maison / appartement sécurisé(e)', priority: 'low' },
+        { id: 'voisin', text: '🌿 Voisin prévenu (plantes, courrier, animaux)', priority: 'low' },
         { id: 'urgences_locales', text: '☎️ Numéros d\'urgence locaux notés', priority: 'medium' },
       ]
     },
-  ].filter(g => g.items.length > 0);
+  ].filter(function(g) { return g.items.length > 0; });
 
   return groups;
 }
 
 function refreshChecklist() {
-  const trip = currentTrip();
+  var trip = currentTrip();
+  var container = document.getElementById('checklistContainer');
   if (!trip) {
-    document.getElementById('checklistContainer').innerHTML = `<div class="empty-state"><div class="empty-state-icon">✈️</div><h2>Aucun voyage sélectionné</h2><p>Créez ou sélectionnez un voyage</p></div>`;
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✈️</div><h2>Aucun voyage sélectionné</h2><p>Créez ou sélectionnez un voyage</p></div>';
+    updateProgressBar('checklistProgressFill', 'checklistProgressLabel', 'checklistProgressPct', 0, 0, false);
     return;
   }
 
-  const groups = buildChecklist(trip.infos || {});
-  const existingMap = {};
-  (trip.checklist || []).forEach(i => existingMap[i.id] = i.done);
+  var groups = buildChecklist(trip.infos || {});
+  var existingMap = {};
+  (trip.checklist || []).forEach(function(i) { existingMap[i.id] = i.done; });
 
-  // Merge: preserve done status for existing, add new
-  const merged = [];
-  groups.forEach(g => {
-    g.items.forEach(item => {
+  var merged = [];
+  groups.forEach(function(g) {
+    g.items.forEach(function(item) {
       merged.push({ id: item.id, text: item.text, priority: item.priority, group: g.id, done: existingMap[item.id] || false });
     });
   });
   trip.checklist = merged;
   save();
-
   renderChecklist(trip, groups);
   updateBadges();
 }
 
 function renderChecklist(trip, groups) {
-  const allItems = trip.checklist || [];
-  const itemMap = {};
-  allItems.forEach(i => itemMap[i.id] = i);
+  var allItems = trip.checklist || [];
+  var itemMap = {};
+  allItems.forEach(function(i) { itemMap[i.id] = i; });
 
-  const done = allItems.filter(i => i.done).length;
-  const total = allItems.length;
-  const pct = total ? Math.round(done / total * 100) : 0;
-  document.getElementById('checklistProgressLabel').textContent = `${done} / ${total} tâches complétées`;
-  document.getElementById('checklistProgressPct').textContent = pct + '%';
-  document.getElementById('checklistProgressFill').style.width = pct + '%';
+  var done = allItems.filter(function(i) { return i.done; }).length;
+  updateProgressBar('checklistProgressFill', 'checklistProgressLabel', 'checklistProgressPct', done, allItems.length, false);
 
-  const html = groups.map(g => {
-    const gItems = g.items.filter(it => itemMap[it.id]);
+  var html = groups.map(function(g) {
+    var gItems = g.items.filter(function(it) { return itemMap[it.id]; });
     if (!gItems.length) return '';
-    const gDone = gItems.filter(it => itemMap[it.id]?.done).length;
-    return `
-      <div class="checklist-group">
-        <div class="checklist-group-header">
-          <span class="checklist-group-icon">${g.icon}</span>
-          <span>${g.title}</span>
-          <span style="margin-left:auto;font-size:0.8rem;color:var(--text3);font-weight:400">${gDone}/${gItems.length}</span>
-        </div>
-        ${gItems.map(it => {
-          const item = itemMap[it.id];
-          return `
-            <div class="checklist-item${item.done ? ' done' : ''}" onclick="toggleChecklist('${item.id}')">
-              <div class="checklist-cb">${item.done ? '✓' : ''}</div>
-              <span class="checklist-text">${item.text}</span>
-              <span class="checklist-priority priority-${item.priority}">${item.priority === 'high' ? 'Urgent' : item.priority === 'medium' ? 'Important' : 'Normal'}</span>
-            </div>`;
-        }).join('')}
-      </div>`;
+    var gDone = gItems.filter(function(it) { return itemMap[it.id] && itemMap[it.id].done; }).length;
+    return '<div class="checklist-group">' +
+      '<div class="checklist-group-header">' +
+      '<span class="checklist-group-icon">' + g.icon + '</span>' +
+      '<span>' + g.title + '</span>' +
+      '<span style="margin-left:auto;font-size:0.8rem;color:var(--text3);font-weight:400">' + gDone + '/' + gItems.length + '</span>' +
+      '</div>' +
+      gItems.map(function(it) {
+        var item = itemMap[it.id];
+        var prioLabel = item.priority === 'high' ? 'Urgent' : item.priority === 'medium' ? 'Important' : 'Normal';
+        return '<div class="checklist-item' + (item.done ? ' done' : '') + '" onclick="toggleChecklist(\'' + item.id + '\')">' +
+          '<div class="checklist-cb">' + (item.done ? '✓' : '') + '</div>' +
+          '<span class="checklist-text">' + item.text + '</span>' +
+          '<span class="checklist-priority priority-' + item.priority + '">' + prioLabel + '</span>' +
+          '</div>';
+      }).join('') +
+      '</div>';
   }).join('');
 
-  document.getElementById('checklistContainer').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">✅</div><h2>Renseignez d\'abord les infos du voyage</h2><p>La checklist se génère automatiquement</p></div>';
+  document.getElementById('checklistContainer').innerHTML = html ||
+    '<div class="empty-state"><div class="empty-state-icon">✅</div><h2>Renseignez les infos voyage d\'abord</h2><p>La checklist se génère automatiquement selon votre destination, transport…</p></div>';
+}
+
+function updateProgressBar(fillId, labelId, pctId, done, total, isBagage) {
+  var pct = total ? Math.round(done / total * 100) : 0;
+  var fill = document.getElementById(fillId);
+  var label = document.getElementById(labelId);
+  var pctEl = document.getElementById(pctId);
+  if (fill) fill.style.width = pct + '%';
+  if (label) label.textContent = done + ' / ' + total + (isBagage ? ' articles préparés' : ' tâches complétées');
+  if (pctEl) pctEl.textContent = pct + '%';
 }
 
 function toggleChecklist(id) {
-  const trip = currentTrip();
-  if (!trip) return;
-  const item = trip.checklist.find(i => i.id === id);
+  var trip = currentTrip(); if (!trip) return;
+  var item = trip.checklist.find(function(i) { return i.id === id; });
   if (item) { item.done = !item.done; save(); }
-  const groups = buildChecklist(trip.infos || {});
-  renderChecklist(trip, groups);
+  renderChecklist(trip, buildChecklist(trip.infos || {}));
   updateBadges();
 }
 
 function resetChecklist() {
-  const trip = currentTrip();
+  var trip = currentTrip();
   if (!trip || !confirm('Réinitialiser toute la checklist ?')) return;
-  trip.checklist.forEach(i => i.done = false);
-  save();
-  refreshChecklist();
+  trip.checklist.forEach(function(i) { i.done = false; });
+  save(); refreshChecklist();
   toast('↺ Checklist réinitialisée');
 }
 
 // ── BAGAGES ────────────────────────────────────────────────
+var BAG_ICONS = { Documents:'📄', 'Vêtements':'👔', 'Hygiène':'🧴', 'Électronique':'🔌', 'Médicaments':'💊', Loisirs:'🎮', Divers:'📦' };
+
 function defaultBagages() {
   return [
     { id: genId(), cat: 'Documents', nom: 'Passeport / Carte d\'identité', packed: false },
-    { id: genId(), cat: 'Documents', nom: 'Billets / Confirmations', packed: false },
+    { id: genId(), cat: 'Documents', nom: 'Billets / Confirmations imprimées', packed: false },
     { id: genId(), cat: 'Documents', nom: 'Assurance voyage', packed: false },
     { id: genId(), cat: 'Vêtements', nom: 'T-shirts', packed: false },
     { id: genId(), cat: 'Vêtements', nom: 'Pantalons / Shorts', packed: false },
-    { id: genId(), cat: 'Vêtements', nom: 'Veste / Pull', packed: false },
+    { id: genId(), cat: 'Vêtements', nom: 'Veste / Sweat', packed: false },
     { id: genId(), cat: 'Vêtements', nom: 'Sous-vêtements', packed: false },
     { id: genId(), cat: 'Vêtements', nom: 'Chaussures de rechange', packed: false },
+    { id: genId(), cat: 'Vêtements', nom: 'Pyjama', packed: false },
     { id: genId(), cat: 'Hygiène', nom: 'Brosse à dents + dentifrice', packed: false },
     { id: genId(), cat: 'Hygiène', nom: 'Shampoing / gel douche', packed: false },
     { id: genId(), cat: 'Hygiène', nom: 'Déodorant', packed: false },
     { id: genId(), cat: 'Hygiène', nom: 'Crème solaire', packed: false },
+    { id: genId(), cat: 'Hygiène', nom: 'Rasoir / épilateur', packed: false },
     { id: genId(), cat: 'Électronique', nom: 'Téléphone + chargeur', packed: false },
     { id: genId(), cat: 'Électronique', nom: 'Adaptateur électrique', packed: false },
     { id: genId(), cat: 'Électronique', nom: 'Batterie externe', packed: false },
     { id: genId(), cat: 'Médicaments', nom: 'Médicaments habituels', packed: false },
     { id: genId(), cat: 'Médicaments', nom: 'Antidouleurs / antihistaminiques', packed: false },
+    { id: genId(), cat: 'Divers', nom: 'Lunettes de soleil', packed: false },
   ];
 }
 
-const BAG_ICONS = { Documents: '📄', Vêtements: '👔', Hygiène: '🧴', Électronique: '🔌', Médicaments: '💊', Loisirs: '🎮', Divers: '📦' };
-
 function renderBagages() {
-  const trip = currentTrip();
-  if (!trip) { document.getElementById('bagagesContainer').innerHTML = `<div class="empty-state"><div class="empty-state-icon">🧳</div><h2>Aucun voyage sélectionné</h2></div>`; return; }
+  var trip = currentTrip();
+  var container = document.getElementById('bagagesContainer');
+  if (!trip) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🧳</div><h2>Aucun voyage sélectionné</h2></div>';
+    updateProgressBar('bagageProgressFill', 'bagageProgressLabel', 'bagageProgressPct', 0, 0, true);
+    return;
+  }
 
-  const items = trip.bagages || [];
-  const packed = items.filter(i => i.packed).length;
-  const total = items.length;
-  const pct = total ? Math.round(packed / total * 100) : 0;
-  document.getElementById('bagageProgressLabel').textContent = `${packed} / ${total} articles préparés`;
-  document.getElementById('bagageProgressPct').textContent = pct + '%';
-  document.getElementById('bagageProgressFill').style.width = pct + '%';
+  var items = trip.bagages || [];
+  var packed = items.filter(function(i) { return i.packed; }).length;
+  updateProgressBar('bagageProgressFill', 'bagageProgressLabel', 'bagageProgressPct', packed, items.length, true);
 
-  const byCat = {};
-  items.forEach(i => { if (!byCat[i.cat]) byCat[i.cat] = []; byCat[i.cat].push(i); });
+  if (!items.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🧳</div><h2>Liste vide</h2><p>Cliquez sur "+ Ajouter" pour ajouter des articles</p></div>';
+    return;
+  }
 
-  const html = Object.entries(byCat).map(([cat, items]) => {
-    const catPacked = items.filter(i => i.packed).length;
-    return `
-      <div class="bagage-group">
-        <div class="bagage-group-header">
-          <span class="bagage-group-title">${BAG_ICONS[cat] || '📦'} ${cat}</span>
-          <span class="bagage-group-count">${catPacked}/${items.length}</span>
-        </div>
-        ${items.map(item => `
-          <div class="bagage-item${item.packed ? ' packed' : ''}" onclick="toggleBagage('${item.id}')">
-            <div class="bagage-cb">${item.packed ? '✓' : ''}</div>
-            <span class="bagage-text">${escHtml(item.nom)}</span>
-            <button class="btn-icon" onclick="deleteBagage('${item.id}',event)" title="Supprimer">🗑️</button>
-          </div>`).join('')}
-      </div>`;
-  }).join('') || '<div class="empty-state"><div class="empty-state-icon">🧳</div><h2>Aucun article</h2><p>Cliquez sur "+ Ajouter" pour commencer</p></div>';
+  var byCat = {};
+  items.forEach(function(i) { if (!byCat[i.cat]) byCat[i.cat] = []; byCat[i.cat].push(i); });
 
-  document.getElementById('bagagesContainer').innerHTML = html;
+  container.innerHTML = Object.entries(byCat).map(function(entry) {
+    var cat = entry[0]; var list = entry[1];
+    var catPacked = list.filter(function(i) { return i.packed; }).length;
+    return '<div class="bagage-group">' +
+      '<div class="bagage-group-header">' +
+      '<span class="bagage-group-title">' + (BAG_ICONS[cat] || '📦') + ' ' + cat + '</span>' +
+      '<span class="bagage-group-count">' + catPacked + '/' + list.length + '</span>' +
+      '</div>' +
+      list.map(function(item) {
+        return '<div class="bagage-item' + (item.packed ? ' packed' : '') + '" onclick="toggleBagage(\'' + item.id + '\')">' +
+          '<div class="bagage-cb">' + (item.packed ? '✓' : '') + '</div>' +
+          '<span class="bagage-text">' + escHtml(item.nom) + '</span>' +
+          '<button class="btn-icon" onclick="deleteBagage(\'' + item.id + '\',event)" title="Supprimer">🗑️</button>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+  }).join('');
+
   updateBadges();
 }
 
 function toggleBagage(id) {
-  const trip = currentTrip(); if (!trip) return;
-  const item = trip.bagages.find(i => i.id === id);
+  var trip = currentTrip(); if (!trip) return;
+  var item = trip.bagages.find(function(i) { return i.id === id; });
   if (item) { item.packed = !item.packed; save(); renderBagages(); }
 }
 
 function deleteBagage(id, e) {
   e.stopPropagation();
-  const trip = currentTrip(); if (!trip) return;
-  trip.bagages = trip.bagages.filter(i => i.id !== id);
+  var trip = currentTrip(); if (!trip) return;
+  trip.bagages = trip.bagages.filter(function(i) { return i.id !== id; });
   save(); renderBagages();
 }
 
@@ -475,11 +661,12 @@ function addBagage() {
 }
 function cancelAddBagage() { document.getElementById('addBagageBar').style.display = 'none'; }
 function confirmAddBagage() {
-  const trip = currentTrip(); if (!trip) return;
-  const nom = document.getElementById('newBagageNom').value.trim();
-  const cat = document.getElementById('newBagageCategorie').value;
+  var trip = currentTrip(); if (!trip) return;
+  var nom = document.getElementById('newBagageNom').value.trim();
   if (!nom) { toast('Entrez un nom', 'error'); return; }
-  trip.bagages.push({ id: genId(), cat, nom, packed: false });
+  var cat = document.getElementById('newBagageCategorie').value;
+  if (!trip.bagages) trip.bagages = [];
+  trip.bagages.push({ id: genId(), cat: cat, nom: nom, packed: false });
   save(); renderBagages();
   document.getElementById('newBagageNom').value = '';
   document.getElementById('addBagageBar').style.display = 'none';
@@ -487,8 +674,8 @@ function confirmAddBagage() {
 }
 
 function resetBagages() {
-  const trip = currentTrip();
-  if (!trip || !confirm('Réinitialiser la liste de bagages ?')) return;
+  var trip = currentTrip();
+  if (!trip || !confirm('Réinitialiser la liste de bagages par défaut ?')) return;
   trip.bagages = defaultBagages();
   save(); renderBagages();
   toast('↺ Bagages réinitialisés');
@@ -496,228 +683,218 @@ function resetBagages() {
 
 // ── DOCUMENTS ──────────────────────────────────────────────
 function renderDocuments() {
-  const trip = currentTrip();
-  const container = document.getElementById('documentsContainer');
-  if (!trip) { container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📄</div><h2>Aucun voyage sélectionné</h2></div>`; return; }
-
-  const i = trip.infos || {};
-  const f = (val, fallback = '—') => val ? escHtml(val) : `<span class="empty">${fallback}</span>`;
-  const fLink = (val) => val ? `<span class="link"><a href="${escHtml(val)}" target="_blank" rel="noopener">🔗 Ouvrir</a></span>` : `<span class="empty">—</span>`;
-
-  const missingKeys = ['infoPays','infoTypeHebergement','infoTransportAller'].filter(k => !i[k]);
-  const missingHtml = missingKeys.length > 0 ? `<div class="info-missing">⚠️ Complétez les infos du voyage pour un résumé complet</div>` : '';
-
-  container.innerHTML = missingHtml + `
-    <div class="doc-card">
-      <div class="doc-card-header"><span>🌍</span><span class="doc-card-title">Destination</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Pays</span><span class="doc-field-value">${f(i.infoPays)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Ville / Région</span><span class="doc-field-value">${f(i.infoVille)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Départ</span><span class="doc-field-value">${i.infoDateDepart ? formatDate(i.infoDateDepart) : '<span class="empty">—</span>'}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Retour</span><span class="doc-field-value">${i.infoDateRetour ? formatDate(i.infoDateRetour) : '<span class="empty">—</span>'}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Voyageurs</span><span class="doc-field-value">${f(i.infoNbVoyageurs)}</span></div>
-        ${i.infoDateDepart && i.infoDateRetour ? `<div class="doc-field"><span class="doc-field-label">Durée</span><span class="doc-field-value">${nbNuits(i.infoDateDepart, i.infoDateRetour)} nuits</span></div>` : ''}
-      </div>
-    </div>
-
-    <div class="doc-card">
-      <div class="doc-card-header"><span>🏨</span><span class="doc-card-title">Hébergement</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Type</span><span class="doc-field-value">${f(i.infoTypeHebergement)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Nom</span><span class="doc-field-value">${f(i.infoNomHebergement)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Téléphone</span><span class="doc-field-value">${f(i.infoTelHebergement)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Référence</span><span class="doc-field-value">${f(i.infoRefHebergement)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Adresse</span><span class="doc-field-value">${f(i.infoAdresseHebergement)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Lien réservation</span><span class="doc-field-value link">${fLink(i.infoLienHebergement)}</span></div>
-      </div>
-    </div>
-
-    <div class="doc-card">
-      <div class="doc-card-header"><span>✈️</span><span class="doc-card-title">Transport aller</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Type</span><span class="doc-field-value">${f(i.infoTransportAller)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">N° vol / train</span><span class="doc-field-value">${f(i.infoNumVolAller)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Aéroport départ</span><span class="doc-field-value">${f(i.infoAeroportDepart)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Aéroport arrivée</span><span class="doc-field-value">${f(i.infoAeroportArrivee)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Heure départ</span><span class="doc-field-value">${f(i.infoHeureDepart)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Heure arrivée</span><span class="doc-field-value">${f(i.infoHeureArrivee)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Référence / PNR</span><span class="doc-field-value">${f(i.infoPNRAller)}</span></div>
-      </div>
-    </div>
-
-    <div class="doc-card">
-      <div class="doc-card-header"><span>🛬</span><span class="doc-card-title">Transport retour</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Type</span><span class="doc-field-value">${f(i.infoTransportRetour)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">N° vol / train</span><span class="doc-field-value">${f(i.infoNumVolRetour)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Heure départ</span><span class="doc-field-value">${f(i.infoHeureDepartRetour)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Référence / PNR</span><span class="doc-field-value">${f(i.infoPNRRetour)}</span></div>
-      </div>
-    </div>
-
-    <div class="doc-card">
-      <div class="doc-card-header"><span>🅿️</span><span class="doc-card-title">Parking &amp; Location</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Parking</span><span class="doc-field-value">${f(i.infoParkingNom)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Référence parking</span><span class="doc-field-value">${f(i.infoParkingRef)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Location voiture</span><span class="doc-field-value">${f(i.infoLocationSociete)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Référence location</span><span class="doc-field-value">${f(i.infoLocationRef)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Lieu prise en charge</span><span class="doc-field-value">${f(i.infoLocationLieu)}</span></div>
-      </div>
-    </div>
-
-    <div class="doc-card">
-      <div class="doc-card-header"><span>🏥</span><span class="doc-card-title">Santé &amp; Urgences</span></div>
-      <div class="doc-grid">
-        <div class="doc-field"><span class="doc-field-label">Assurance</span><span class="doc-field-value">${f(i.infoAssurance)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Urgence assurance</span><span class="doc-field-value">${f(i.infoAssuranceTel)}</span></div>
-        <div class="doc-field"><span class="doc-field-label">Groupe sanguin</span><span class="doc-field-value">${f(i.infoGroupeSanguin)}</span></div>
-        <div class="doc-field" style="grid-column:1/-1"><span class="doc-field-label">Notes médicales</span><span class="doc-field-value">${f(i.infoMedicaments)}</span></div>
-      </div>
-    </div>
-  `;
-}
-
-// ── À VISITER ──────────────────────────────────────────────
-const CAT_ICONS = { monument: '🏛️', restaurant: '🍽️', nature: '🌿', musee: '🖼️', shopping: '🛍️', autre: '📌' };
-const CAT_LABELS = { monument: 'Monument', restaurant: 'Restaurant', nature: 'Nature', musee: 'Musée', shopping: 'Shopping', autre: 'Autre' };
-
-let currentLieuFilter = 'tous';
-
-function renderLieux() {
-  const trip = currentTrip();
-  const container = document.getElementById('lieuxContainer');
-  if (!trip) { container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun voyage sélectionné</h2></div>`; return; }
-
-  // Update subtitle
-  const pays = trip.infos?.infoPays || ''; const ville = trip.infos?.infoVille || '';
-  document.getElementById('visiterSubtitle').textContent = [ville, pays].filter(Boolean).join(', ') || 'Planifiez vos visites';
-
-  const lieux = (trip.lieux || []).filter(l => currentLieuFilter === 'tous' || l.cat === currentLieuFilter);
-
-  if (lieux.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun lieu${currentLieuFilter !== 'tous' ? ' dans cette catégorie' : ''}</h2><p>Cliquez sur "+ Ajouter un lieu" pour commencer</p></div>`;
+  var trip = currentTrip();
+  var container = document.getElementById('documentsContainer');
+  if (!trip) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📄</div><h2>Aucun voyage sélectionné</h2></div>';
     return;
   }
 
-  container.innerHTML = lieux.map(l => {
-    const addr = l.adresse ? encodeURIComponent(l.adresse) : encodeURIComponent(l.nom);
-    return `
-      <div class="lieu-card" id="lieu-${l.id}">
-        <div class="lieu-header">
-          <span class="lieu-title">${CAT_ICONS[l.cat] || '📌'} ${escHtml(l.nom)}</span>
-          <span class="lieu-cat-badge">${CAT_LABELS[l.cat] || l.cat}</span>
-        </div>
-        <div class="lieu-meta">
-          ${l.adresse ? `<span>📍 ${escHtml(l.adresse)}</span>` : ''}
-          ${l.distance ? `<span>📏 ${escHtml(l.distance)}</span>` : ''}
-        </div>
-        ${l.notes ? `<div class="lieu-notes">💬 ${escHtml(l.notes)}</div>` : ''}
-        <div class="lieu-actions">
-          <a class="btn-maps" href="https://www.google.com/maps/search/?api=1&query=${addr}" target="_blank" rel="noopener">🗺️ Google Maps</a>
-          <a class="btn-maps plans" href="https://maps.apple.com/?q=${addr}" target="_blank" rel="noopener">🍎 Plans</a>
-          <a class="btn-maps waze" href="https://waze.com/ul?q=${addr}" target="_blank" rel="noopener">🚗 Waze</a>
-          <button class="btn-danger" onclick="deleteLieu('${l.id}')">🗑️</button>
-        </div>
-      </div>`;
+  var i = trip.infos || {};
+  function f(val) { return val ? '<span class="doc-field-value">' + escHtml(val) + '</span>' : '<span class="doc-field-value empty">—</span>'; }
+  function fLink(val) { return val ? '<span class="doc-field-value link"><a href="' + escHtml(val) + '" target="_blank" rel="noopener">🔗 Ouvrir le lien</a></span>' : '<span class="doc-field-value empty">—</span>'; }
+
+  var nuits = nbNuits(i.infoDateDepart, i.infoDateRetour);
+  var typeTransport = { avion:'✈️ Avion', train:'🚄 Train', voiture:'🚗 Voiture', bus:'🚌 Bus', ferry:'⛴️ Ferry' };
+  var typeHeberg = { hotel:'🏨 Hôtel', gite:'🏡 Gîte', airbnb:'🏠 Airbnb', camping:'⛺ Camping', autre:'🛖 Autre' };
+
+  container.innerHTML =
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🌍</span><span class="doc-card-title">Destination</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Pays</span>' + f(i.infoPays) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Ville / Région</span>' + f(i.infoVille) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Date départ</span>' + f(i.infoDateDepart ? formatDate(i.infoDateDepart) : '') + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Date retour</span>' + f(i.infoDateRetour ? formatDate(i.infoDateRetour) : '') + '</div>' +
+    (nuits > 0 ? '<div class="doc-field"><span class="doc-field-label">Durée</span><span class="doc-field-value">🌙 ' + nuits + ' nuit' + (nuits > 1 ? 's' : '') + '</span></div>' : '') +
+    '<div class="doc-field"><span class="doc-field-label">Voyageurs</span>' + f(i.infoNbVoyageurs) + '</div>' +
+    '</div></div>' +
+
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🏨</span><span class="doc-card-title">Hébergement</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Type</span>' + f(typeHeberg[i.infoTypeHebergement] || i.infoTypeHebergement) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Nom</span>' + f(i.infoNomHebergement) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Téléphone</span>' + f(i.infoTelHebergement) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Réf. réservation</span>' + f(i.infoRefHebergement) + '</div>' +
+    '<div class="doc-field" style="grid-column:1/-1"><span class="doc-field-label">Adresse</span>' + f(i.infoAdresseHebergement) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Lien réservation</span>' + fLink(i.infoLienHebergement) + '</div>' +
+    '</div></div>' +
+
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🛫</span><span class="doc-card-title">Transport aller</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Type</span>' + f(typeTransport[i.infoTransportAller] || i.infoTransportAller) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">N° vol / train</span>' + f(i.infoNumVolAller) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport départ</span>' + f(i.infoAeroportDepart) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport arrivée</span>' + f(i.infoAeroportArrivee) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Heure départ</span>' + f(i.infoHeureDepart) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Heure arrivée</span>' + f(i.infoHeureArrivee) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Référence / PNR</span>' + f(i.infoPNRAller) + '</div>' +
+    '</div></div>' +
+
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🛬</span><span class="doc-card-title">Transport retour</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Type</span>' + f(typeTransport[i.infoTransportRetour] || i.infoTransportRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">N° vol / train</span>' + f(i.infoNumVolRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Heure départ</span>' + f(i.infoHeureDepartRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Référence / PNR</span>' + f(i.infoPNRRetour) + '</div>' +
+    '</div></div>' +
+
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🅿️</span><span class="doc-card-title">Parking & Location véhicule</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Parking</span>' + f(i.infoParkingNom) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Réf. parking</span>' + f(i.infoParkingRef) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Société location</span>' + f(i.infoLocationSociete) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Réf. location</span>' + f(i.infoLocationRef) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Lieu prise en charge</span>' + f(i.infoLocationLieu) + '</div>' +
+    '</div></div>' +
+
+    '<div class="doc-card">' +
+    '<div class="doc-card-header"><span>🏥</span><span class="doc-card-title">Santé & Urgences</span></div>' +
+    '<div class="doc-grid">' +
+    '<div class="doc-field"><span class="doc-field-label">Assurance</span>' + f(i.infoAssurance) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">N° urgence assurance</span>' + f(i.infoAssuranceTel) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Groupe sanguin</span>' + f(i.infoGroupeSanguin) + '</div>' +
+    (i.infoMedicaments ? '<div class="doc-field" style="grid-column:1/-1"><span class="doc-field-label">Notes médicales</span><span class="doc-field-value">' + escHtml(i.infoMedicaments) + '</span></div>' : '') +
+    '</div></div>';
+}
+
+// ── À VISITER ──────────────────────────────────────────────
+var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', nature:'🌿', musee:'🖼️', shopping:'🛍️', autre:'📌' };
+var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', nature:'Nature', musee:'Musée', shopping:'Shopping', autre:'Autre' };
+var currentLieuFilter = 'tous';
+
+function renderLieux() {
+  var trip = currentTrip();
+  var container = document.getElementById('lieuxContainer');
+  if (!trip) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun voyage sélectionné</h2></div>';
+    return;
+  }
+  var dest = [trip.infos && trip.infos.infoVille, trip.infos && trip.infos.infoPays].filter(Boolean).join(', ');
+  document.getElementById('visiterSubtitle').textContent = dest || 'Planifiez vos visites';
+
+  var lieux = (trip.lieux || []).filter(function(l) { return currentLieuFilter === 'tous' || l.cat === currentLieuFilter; });
+  if (!lieux.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun lieu' + (currentLieuFilter !== 'tous' ? ' dans cette catégorie' : '') + '</h2><p>Cliquez sur "+ Ajouter un lieu" pour commencer</p></div>';
+    return;
+  }
+
+  container.innerHTML = lieux.map(function(l) {
+    var addr = encodeURIComponent(l.adresse || l.nom);
+    return '<div class="lieu-card">' +
+      '<div class="lieu-header">' +
+      '<span class="lieu-title">' + (CAT_ICONS[l.cat] || '📌') + ' ' + escHtml(l.nom) + '</span>' +
+      '<span class="lieu-cat-badge">' + (CAT_LABELS[l.cat] || l.cat) + '</span>' +
+      '</div>' +
+      '<div class="lieu-meta">' +
+      (l.adresse ? '<span>📍 ' + escHtml(l.adresse) + '</span>' : '') +
+      (l.distance ? '<span>📏 ' + escHtml(l.distance) + '</span>' : '') +
+      '</div>' +
+      (l.notes ? '<div class="lieu-notes">💬 ' + escHtml(l.notes) + '</div>' : '') +
+      '<div class="lieu-actions">' +
+      '<a class="btn-maps" href="https://www.google.com/maps/search/?api=1&query=' + addr + '" target="_blank" rel="noopener">🗺️ Google Maps</a>' +
+      '<a class="btn-maps plans" href="https://maps.apple.com/?q=' + addr + '" target="_blank" rel="noopener">🍎 Plans</a>' +
+      '<a class="btn-maps waze" href="https://waze.com/ul?q=' + addr + '" target="_blank" rel="noopener">🚗 Waze</a>' +
+      '<button class="btn-danger" onclick="deleteLieu(\'' + l.id + '\')">🗑️</button>' +
+      '</div></div>';
   }).join('');
 }
 
 function filterLieux(filter, btn) {
   currentLieuFilter = filter;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
   renderLieux();
 }
 
 function triParDistance() {
-  const trip = currentTrip(); if (!trip) return;
-  trip.lieux.sort((a, b) => {
-    const da = parseFloat(a.distance) || 9999;
-    const db = parseFloat(b.distance) || 9999;
-    return da - db;
-  });
+  var trip = currentTrip(); if (!trip) return;
+  trip.lieux.sort(function(a, b) { return (parseFloat(a.distance) || 9999) - (parseFloat(b.distance) || 9999); });
   save(); renderLieux();
-  toast('📏 Lieux triés par distance');
+  toast('📏 Triés par distance');
 }
 
 function showAddLieu() {
-  ['newLieuNom','newLieuAdresse','newLieuDistance','newLieuNotes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['newLieuNom','newLieuAdresse','newLieuDistance','newLieuNotes'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
   openModal('modalAddLieu');
+  setTimeout(function() { document.getElementById('newLieuNom').focus(); }, 100);
 }
 
 function confirmAddLieu() {
-  const trip = currentTrip(); if (!trip) return;
-  const nom = document.getElementById('newLieuNom').value.trim();
-  if (!nom) { toast('Entrez un nom', 'error'); return; }
-  const lieu = {
-    id: genId(), nom,
+  var trip = currentTrip(); if (!trip) return;
+  var nom = document.getElementById('newLieuNom').value.trim();
+  if (!nom) { toast('Entrez un nom de lieu', 'error'); return; }
+  if (!trip.lieux) trip.lieux = [];
+  trip.lieux.push({
+    id: genId(), nom: nom,
     cat: document.getElementById('newLieuCategorie').value,
     adresse: document.getElementById('newLieuAdresse').value.trim(),
     distance: document.getElementById('newLieuDistance').value.trim(),
     notes: document.getElementById('newLieuNotes').value.trim(),
-  };
-  if (!trip.lieux) trip.lieux = [];
-  trip.lieux.push(lieu);
+  });
   save(); closeModal('modalAddLieu'); renderLieux();
   toast('📍 Lieu ajouté', 'success');
 }
 
 function deleteLieu(id) {
-  const trip = currentTrip(); if (!trip) return;
-  trip.lieux = trip.lieux.filter(l => l.id !== id);
+  var trip = currentTrip(); if (!trip) return;
+  trip.lieux = trip.lieux.filter(function(l) { return l.id !== id; });
   save(); renderLieux();
 }
 
 // ── BUDGET ─────────────────────────────────────────────────
-const DEP_ICONS = { transport: '✈️', hebergement: '🏨', restauration: '🍽️', activites: '🎡', shopping: '🛍️', sante: '💊', autre: '📦' };
-const DEP_LABELS = { transport: 'Transport', hebergement: 'Hébergement', restauration: 'Restauration', activites: 'Activités', shopping: 'Shopping', sante: 'Santé', autre: 'Divers' };
+var DEP_ICONS  = { transport:'✈️', hebergement:'🏨', restauration:'🍽️', activites:'🎡', shopping:'🛍️', sante:'💊', autre:'📦' };
+var DEP_LABELS = { transport:'Transport', hebergement:'Hébergement', restauration:'Restauration', activites:'Activités', shopping:'Shopping', sante:'Santé', autre:'Divers' };
 
 function renderBudget() {
-  const trip = currentTrip();
+  var trip = currentTrip();
+  var summary = document.getElementById('budgetSummary');
+  var container = document.getElementById('budgetContainer');
   if (!trip) {
-    document.getElementById('budgetSummary').innerHTML = '';
-    document.getElementById('budgetContainer').innerHTML = `<div class="empty-state"><div class="empty-state-icon">💶</div><h2>Aucun voyage sélectionné</h2></div>`;
+    summary.innerHTML = '';
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💶</div><h2>Aucun voyage sélectionné</h2></div>';
     return;
   }
 
-  const deps = trip.depenses || [];
-  const totalPrevu = deps.filter(d => d.type === 'prevu').reduce((s, d) => s + d.montant, 0);
-  const totalReel = deps.filter(d => d.type === 'reel').reduce((s, d) => s + d.montant, 0);
-  const total = totalPrevu + totalReel;
+  var deps = trip.depenses || [];
+  var totalPrevu = deps.filter(function(d) { return d.type === 'prevu'; }).reduce(function(s, d) { return s + Number(d.montant); }, 0);
+  var totalReel  = deps.filter(function(d) { return d.type === 'reel';  }).reduce(function(s, d) { return s + Number(d.montant); }, 0);
 
-  document.getElementById('budgetSummary').innerHTML = `
-    <div class="budget-kpi"><div class="budget-kpi-label">Total</div><div class="budget-kpi-value total">${fmt(total)} €</div></div>
-    <div class="budget-kpi"><div class="budget-kpi-label">Prévu</div><div class="budget-kpi-value prevu">${fmt(totalPrevu)} €</div></div>
-    <div class="budget-kpi"><div class="budget-kpi-label">Dépensé</div><div class="budget-kpi-value reel">${fmt(totalReel)} €</div></div>
-    <div class="budget-kpi"><div class="budget-kpi-label">Nb dépenses</div><div class="budget-kpi-value total">${deps.length}</div></div>
-  `;
+  summary.innerHTML =
+    '<div class="budget-kpi"><div class="budget-kpi-label">Total global</div><div class="budget-kpi-value total">' + fmt(totalPrevu + totalReel) + ' €</div></div>' +
+    '<div class="budget-kpi"><div class="budget-kpi-label">Prévu</div><div class="budget-kpi-value prevu">' + fmt(totalPrevu) + ' €</div></div>' +
+    '<div class="budget-kpi"><div class="budget-kpi-label">Dépensé</div><div class="budget-kpi-value reel">' + fmt(totalReel) + ' €</div></div>' +
+    '<div class="budget-kpi"><div class="budget-kpi-label">Nb dépenses</div><div class="budget-kpi-value total">' + deps.length + '</div></div>';
 
-  if (deps.length === 0) {
-    document.getElementById('budgetContainer').innerHTML = `<div class="empty-state"><div class="empty-state-icon">💶</div><h2>Aucune dépense</h2><p>Ajoutez vos dépenses prévues ou réelles</p></div>`;
+  if (!deps.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💶</div><h2>Aucune dépense enregistrée</h2><p>Cliquez sur "+ Ajouter" pour suivre votre budget</p></div>';
     return;
   }
 
-  const byCat = {};
-  deps.forEach(d => { if (!byCat[d.cat]) byCat[d.cat] = []; byCat[d.cat].push(d); });
+  var byCat = {};
+  deps.forEach(function(d) { if (!byCat[d.cat]) byCat[d.cat] = []; byCat[d.cat].push(d); });
 
-  document.getElementById('budgetContainer').innerHTML = Object.entries(byCat).map(([cat, items]) => {
-    const catTotal = items.reduce((s, d) => s + d.montant, 0);
-    return `
-      <div class="budget-group">
-        <div class="budget-group-header">
-          <span>${DEP_ICONS[cat] || '📦'} ${DEP_LABELS[cat] || cat}</span>
-          <span>${fmt(catTotal)} €</span>
-        </div>
-        ${items.map(d => `
-          <div class="budget-item">
-            <span class="budget-item-desc">${escHtml(d.desc)}</span>
-            <div class="budget-item-right">
-              <span class="budget-item-type ${d.type === 'prevu' ? 'type-prevu' : 'type-reel'}">${d.type === 'prevu' ? 'Prévu' : 'Réel'}</span>
-              <span class="budget-item-amount">${fmt(d.montant)} €</span>
-              <button class="btn-icon" onclick="deleteDepense('${d.id}')">🗑️</button>
-            </div>
-          </div>`).join('')}
-      </div>`;
+  container.innerHTML = Object.entries(byCat).map(function(entry) {
+    var cat = entry[0]; var items = entry[1];
+    var catTotal = items.reduce(function(s, d) { return s + Number(d.montant); }, 0);
+    return '<div class="budget-group">' +
+      '<div class="budget-group-header"><span>' + (DEP_ICONS[cat] || '📦') + ' ' + (DEP_LABELS[cat] || cat) + '</span><span>' + fmt(catTotal) + ' €</span></div>' +
+      items.map(function(d) {
+        return '<div class="budget-item">' +
+          '<span class="budget-item-desc">' + escHtml(d.desc) + '</span>' +
+          '<div class="budget-item-right">' +
+          '<span class="budget-item-type ' + (d.type === 'prevu' ? 'type-prevu' : 'type-reel') + '">' + (d.type === 'prevu' ? 'Prévu' : 'Réel') + '</span>' +
+          '<span class="budget-item-amount">' + fmt(d.montant) + ' €</span>' +
+          '<button class="btn-icon" onclick="deleteDepense(\'' + d.id + '\')">🗑️</button>' +
+          '</div></div>';
+      }).join('') +
+      '</div>';
   }).join('');
 }
 
@@ -725,77 +902,84 @@ function showAddDepense() {
   document.getElementById('newDepenseDesc').value = '';
   document.getElementById('newDepenseMontant').value = '';
   openModal('modalAddDepense');
+  setTimeout(function() { document.getElementById('newDepenseDesc').focus(); }, 100);
 }
 
 function confirmAddDepense() {
-  const trip = currentTrip(); if (!trip) return;
-  const desc = document.getElementById('newDepenseDesc').value.trim();
-  const montant = parseFloat(document.getElementById('newDepenseMontant').value);
-  if (!desc || isNaN(montant)) { toast('Remplissez tous les champs', 'error'); return; }
-  const dep = {
-    id: genId(), cat: document.getElementById('newDepenseCat').value,
-    desc, montant, type: document.getElementById('newDepenseType').value
-  };
+  var trip = currentTrip(); if (!trip) return;
+  var desc = document.getElementById('newDepenseDesc').value.trim();
+  var montant = parseFloat(document.getElementById('newDepenseMontant').value);
+  if (!desc || isNaN(montant) || montant < 0) { toast('Remplissez tous les champs', 'error'); return; }
   if (!trip.depenses) trip.depenses = [];
-  trip.depenses.push(dep);
+  trip.depenses.push({
+    id: genId(),
+    cat: document.getElementById('newDepenseCat').value,
+    desc: desc, montant: montant,
+    type: document.getElementById('newDepenseType').value
+  });
   save(); closeModal('modalAddDepense'); renderBudget();
   toast('💶 Dépense ajoutée', 'success');
 }
 
 function deleteDepense(id) {
-  const trip = currentTrip(); if (!trip) return;
-  trip.depenses = trip.depenses.filter(d => d.id !== id);
+  var trip = currentTrip(); if (!trip) return;
+  trip.depenses = trip.depenses.filter(function(d) { return d.id !== id; });
   save(); renderBudget();
 }
 
 // ── MODALS ─────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
-});
-
-// ── UTILS ──────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function formatDate(d) {
-  if (!d) return '';
-  const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y}`;
-}
-
-function nbNuits(d1, d2) {
-  const a = new Date(d1), b = new Date(d2);
-  return Math.max(0, Math.round((b - a) / 86400000));
-}
-
-function fmt(n) {
-  return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // ── INIT ──────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   load();
+
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+  // Hide all modals
+  document.querySelectorAll('.modal').forEach(function(m) { m.style.display = 'none'; });
+  // Hide badges
+  document.querySelectorAll('.nav-badge').forEach(function(b) { b.style.display = 'none'; });
+  // Hide misc
+  document.getElementById('toast').style.display = 'none';
+  document.getElementById('sidebarOverlay').style.display = 'none';
+  document.getElementById('tripDropdown').style.display = 'none';
+  document.getElementById('addBagageBar').style.display = 'none';
+
   renderTripSelector();
   renderTripList();
 
-  if (state.trips.length === 0) {
-    // Welcome state
-    document.getElementById('infosSubtitle').textContent = 'Créez votre premier voyage pour commencer';
-  } else {
+  if (state.trips.length > 0) {
     if (!state.currentTripId) state.currentTripId = state.trips[0].id;
     loadCurrentTrip();
+  } else {
+    var sub = document.getElementById('infosSubtitle');
+    if (sub) sub.textContent = 'Créez votre premier voyage pour commencer';
   }
 
   navigate(state.currentPage || 'infos');
+  initAutocompletes();
+
+  var d1 = document.getElementById('infoDateDepart');
+  var d2 = document.getElementById('infoDateRetour');
+  if (d1) d1.addEventListener('change', updateNuitsDisplay);
+  if (d2) d2.addEventListener('change', updateNuitsDisplay);
+  updateNuitsDisplay();
 
   // Close dropdown on outside click
-  document.addEventListener('click', e => {
-    const dd = document.getElementById('tripDropdown');
-    const btn = document.getElementById('tripCurrentBtn');
-    if (!dd.classList.contains('hidden') && !dd.contains(e.target) && !btn.contains(e.target)) closeDropdown();
+  document.addEventListener('click', function(e) {
+    var dd = document.getElementById('tripDropdown');
+    var btn = document.getElementById('tripCurrentBtn');
+    if (dd.style.display !== 'none' && !dd.contains(e.target) && !btn.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  // Escape closes modals
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal').forEach(function(m) { m.style.display = 'none'; });
+    }
   });
 });
