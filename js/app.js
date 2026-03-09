@@ -104,10 +104,19 @@ function deleteTrip(id, e) {
   e.stopPropagation();
   if (!confirm('Supprimer ce voyage et toutes ses données ?')) return;
   state.trips = state.trips.filter(function(t) { return t.id !== id; });
-  if (state.currentTripId === id) state.currentTripId = state.trips[0] ? state.trips[0].id : null;
+  if (state.currentTripId === id) state.currentTripId = state.trips.length > 0 ? state.trips[0].id : null;
   save();
+  closeDropdown();
   renderTripSelector();
   loadCurrentTrip();
+  // Si plus aucun voyage, proposer d'en créer un
+  if (state.trips.length === 0) {
+    setTimeout(function() {
+      document.getElementById('newTripName').value = '';
+      document.getElementById('modalNewTrip').style.display = 'flex';
+      document.getElementById('newTripName').focus();
+    }, 200);
+  }
 }
 
 function toggleTripDropdown() {
@@ -530,19 +539,27 @@ var VILLES_PAR_PAYS = {
 };
 
 function getVillesList() {
-  var pays = document.getElementById('infoPays') ? normalizeStr(document.getElementById('infoPays').value) : '';
-  // Try to match a country key
-  var found = null;
+  var pays = document.getElementById('infoPays') ? normalizeStr(document.getElementById('infoPays').value).replace(/\s/g,'') : '';
+  if (!pays || pays.length < 2) return VILLES_GLOBALES;
+
+  // Cherche la meilleure correspondance dans VILLES_PAR_PAYS
+  var bestKey = null;
+  var bestScore = 0;
   Object.keys(VILLES_PAR_PAYS).forEach(function(key) {
-    if (pays.indexOf(key.replace(/\s/g,'')) !== -1 || key.indexOf(pays.replace(/\s/g,'').slice(0,5)) !== -1) {
-      if (!found) found = key;
-    }
+    var normKey = key.replace(/\s/g,'');
+    var score = 0;
+    // Correspondance exacte
+    if (normKey === pays) score = 100;
+    // Le pays saisi contient la clé (ex: "etats-unis" dans "etats-unis-amerique")
+    else if (pays.indexOf(normKey) !== -1) score = normKey.length;
+    // La clé contient le pays saisi
+    else if (normKey.indexOf(pays) !== -1) score = pays.length;
+    if (score > bestScore) { bestScore = score; bestKey = key; }
   });
-  if (found) {
-    // Return country-specific list first, then append others not in it
-    var specific = VILLES_PAR_PAYS[found];
-    var others = VILLES_GLOBALES.filter(function(v) { return specific.indexOf(v) === -1; });
-    return specific.concat(others);
+
+  // Seulement si la correspondance est suffisamment forte (>= 4 chars)
+  if (bestKey && bestScore >= 4) {
+    return VILLES_PAR_PAYS[bestKey];
   }
   return VILLES_GLOBALES;
 }
@@ -681,8 +698,14 @@ function setupAutocomplete(inputId, list, maxItems) {
 function pickAC(e, inputId, val) {
   e.preventDefault();
   var input = document.getElementById(inputId);
-  if (input) input.value = val;
-  // trigger nuits update if dates
+  if (!input) return;
+  var oldVal = input.value;
+  input.value = val;
+  // Si le pays change, vider le champ ville
+  if (inputId === 'infoPays' && oldVal !== val) {
+    var villeInput = document.getElementById('infoVille');
+    if (villeInput) villeInput.value = '';
+  }
   if (inputId === 'infoDateDepart' || inputId === 'infoDateRetour') updateNuitsDisplay();
 }
 
@@ -1272,6 +1295,12 @@ document.addEventListener('DOMContentLoaded', function() {
   } else {
     var sub = document.getElementById('infosSubtitle');
     if (sub) sub.textContent = 'Créez votre premier voyage pour commencer';
+    // Ouvrir automatiquement le modal "Nouveau voyage"
+    setTimeout(function() {
+      document.getElementById('newTripName').value = '';
+      document.getElementById('modalNewTrip').style.display = 'flex';
+      document.getElementById('newTripName').focus();
+    }, 300);
   }
 
   navigate(state.currentPage || 'infos');
