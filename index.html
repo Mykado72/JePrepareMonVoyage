@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Je Prépare Mon Voyage ✈️</title>
+  <base href="/JePrepareMonVoyage/"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" href="favicon.png"/>
+  <meta name="theme-color" content="#1A3A5C"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/app.css"/>
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">✈️</span>
+        <div>
+          <div class="logo-title">Je Prépare</div>
+          <div class="logo-sub">Mon Voyage</div>
+        </div>
+      </div>
+
+      <div class="trip-selector-wrap">
+        <div class="trip-current" id="tripCurrentBtn" onclick="toggleTripDropdown()">
+          <span id="tripCurrentLabel">Aucun voyage</span>
+          <span class="trip-chevron">▾</span>
+        </div>
+        <div class="trip-dropdown hidden" id="tripDropdown">
+          <div id="tripList"></div>
+          <button class="btn-add-trip" onclick="newTrip()">＋ Nouveau voyage</button>
+        </div>
+      </div>
+
+      <ul class="nav-links" id="navLinks">
+        <li class="nav-item active" data-page="infos" onclick="navigate('infos')">
+          <span class="nav-icon">🗺️</span><span>Infos voyage</span>
+        </li>
+        <li class="nav-item" data-page="checklist" onclick="navigate('checklist')">
+          <span class="nav-icon">✅</span><span>Checklist</span>
+          <span class="nav-badge" id="badgeChecklist"></span>
+        </li>
+        <li class="nav-item" data-page="bagages" onclick="navigate('bagages')">
+          <span class="nav-icon">🧳</span><span>Bagages</span>
+          <span class="nav-badge" id="badgeBagages"></span>
+        </li>
+        <li class="nav-item" data-page="documents" onclick="navigate('documents')">
+          <span class="nav-icon">📄</span><span>Documents</span>
+        </li>
+        <li class="nav-item" data-page="visiter" onclick="navigate('visiter')">
+          <span class="nav-icon">📍</span><span>À visiter</span>
+        </li>
+        <li class="nav-item" data-page="budget" onclick="navigate('budget')">
+          <span class="nav-icon">💶</span><span>Budget</span>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="app-version">v1.0.0</div>
+        <div class="app-by">by Mykado72</div>
+      </div>
+    </nav>
+
+    <!-- ===== MOBILE HEADER ===== -->
+    <header class="mobile-header">
+      <button class="hamburger" onclick="toggleSidebar()">☰</button>
+      <span class="mobile-title" id="mobileTitle">Infos voyage</span>
+      <button class="mobile-trip-btn" onclick="toggleTripDropdown(); toggleSidebar()">✈️</button>
+    </header>
+    <div class="sidebar-overlay hidden" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main-content" id="mainContent">
+
+      <!-- ========== PAGE: INFOS ========== -->
+      <div class="page active" id="page-infos">
+        <div class="page-header">
+          <div>
+            <h1>🗺️ Infos voyage</h1>
+            <p class="subtitle" id="infosSubtitle">Renseignez les informations de votre voyage</p>
+          </div>
+          <button class="btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+        </div>
+
+        <div class="cards-grid">
+          <!-- Destination -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🌍</span><h2>Destination</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Pays de destination</label>
+                <input type="text" id="infoPays" placeholder="ex: Espagne, Japon, Maroc…" oninput="updateChecklistOnChange()"/>
+              </div>
+              <div class="form-group">
+                <label>Ville / Région</label>
+                <input type="text" id="infoVille" placeholder="ex: Barcelone, Kyoto…"/>
+              </div>
+              <div class="form-group">
+                <label>Dates du voyage</label>
+                <div class="date-range">
+                  <input type="date" id="infoDateDepart"/>
+                  <span>→</span>
+                  <input type="date" id="infoDateRetour"/>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Nombre de voyageurs</label>
+                <input type="number" id="infoNbVoyageurs" min="1" max="20" value="1"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hébergement -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🏨</span><h2>Hébergement</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Type d'hébergement</label>
+                <select id="infoTypeHebergement" onchange="updateHebergementUI()">
+                  <option value="">-- Choisir --</option>
+                  <option value="hotel">🏨 Hôtel</option>
+                  <option value="gite">🏡 Gîte</option>
+                  <option value="airbnb">🏠 Airbnb</option>
+                  <option value="camping">⛺ Camping</option>
+                  <option value="autre">🛖 Autre</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Nom de l'établissement</label>
+                <input type="text" id="infoNomHebergement" placeholder="Nom de l'hôtel, du gîte…"/>
+              </div>
+              <div class="form-group">
+                <label>Adresse complète</label>
+                <textarea id="infoAdresseHebergement" rows="2" placeholder="Adresse, code postal, ville…"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Téléphone / Contact</label>
+                <input type="text" id="infoTelHebergement" placeholder="+34 123 456 789"/>
+              </div>
+              <div class="form-group">
+                <label>Numéro de réservation</label>
+                <input type="text" id="infoRefHebergement" placeholder="Référence de réservation"/>
+              </div>
+              <div class="form-group">
+                <label>Lien de réservation</label>
+                <input type="url" id="infoLienHebergement" placeholder="https://…"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transport Aller -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🛫</span><h2>Transport aller</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Type de transport</label>
+                <select id="infoTransportAller" onchange="updateTransportUI('aller')">
+                  <option value="">-- Choisir --</option>
+                  <option value="avion">✈️ Avion</option>
+                  <option value="train">🚄 Train</option>
+                  <option value="voiture">🚗 Voiture</option>
+                  <option value="bus">🚌 Bus</option>
+                  <option value="ferry">⛴️ Ferry</option>
+                </select>
+              </div>
+              <div class="form-group transport-avion-aller">
+                <label>Aéroport de départ</label>
+                <input type="text" id="infoAeroportDepart" placeholder="ex: CDG, ORY, LYS…"/>
+              </div>
+              <div class="form-group transport-avion-aller">
+                <label>Aéroport d'arrivée</label>
+                <input type="text" id="infoAeroportArrivee" placeholder="ex: BCN, NRT, CMN…"/>
+              </div>
+              <div class="form-group">
+                <label>N° de vol / train / billet</label>
+                <input type="text" id="infoNumVolAller" placeholder="AF1234, TGV 8731…"/>
+              </div>
+              <div class="form-group">
+                <label>Date &amp; heure de départ</label>
+                <input type="datetime-local" id="infoHeureDepart"/>
+              </div>
+              <div class="form-group">
+                <label>Date &amp; heure d'arrivée</label>
+                <input type="datetime-local" id="infoHeureArrivee"/>
+              </div>
+              <div class="form-group">
+                <label>Référence / PNR</label>
+                <input type="text" id="infoPNRAller" placeholder="ABC123"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transport Retour -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🛬</span><h2>Transport retour</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Type de transport</label>
+                <select id="infoTransportRetour">
+                  <option value="">-- Choisir --</option>
+                  <option value="avion">✈️ Avion</option>
+                  <option value="train">🚄 Train</option>
+                  <option value="voiture">🚗 Voiture</option>
+                  <option value="bus">🚌 Bus</option>
+                  <option value="ferry">⛴️ Ferry</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>N° de vol / train</label>
+                <input type="text" id="infoNumVolRetour" placeholder="AF1235…"/>
+              </div>
+              <div class="form-group">
+                <label>Date &amp; heure de départ</label>
+                <input type="datetime-local" id="infoHeureDepartRetour"/>
+              </div>
+              <div class="form-group">
+                <label>Référence / PNR</label>
+                <input type="text" id="infoPNRRetour" placeholder="ABC124"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parking & Transfert -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🅿️</span><h2>Parking &amp; Transfert</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Parking réservé ?</label>
+                <select id="infoParkingReserve" onchange="updateChecklistOnChange()">
+                  <option value="non">Non</option>
+                  <option value="oui">Oui</option>
+                  <option value="navette">Navette aéroport</option>
+                  <option value="taxi">Taxi / VTC</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Nom / adresse du parking</label>
+                <input type="text" id="infoParkingNom" placeholder="Parking P3, Effia…"/>
+              </div>
+              <div class="form-group">
+                <label>Référence de réservation</label>
+                <input type="text" id="infoParkingRef" placeholder="Référence parking"/>
+              </div>
+              <div class="form-group">
+                <label>Notes transfert</label>
+                <textarea id="infoTransfertNotes" rows="2" placeholder="Instructions, RDV navette…"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location véhicule -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🚗</span><h2>Location véhicule</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Location de voiture sur place ?</label>
+                <select id="infoLocationVoiture" onchange="updateChecklistOnChange()">
+                  <option value="non">Non</option>
+                  <option value="oui">Oui</option>
+                </select>
+              </div>
+              <div class="form-group" id="locationVoitureDetails">
+                <label>Société de location</label>
+                <input type="text" id="infoLocationSociete" placeholder="Hertz, Europcar, Sixt…"/>
+              </div>
+              <div class="form-group" id="locationVoitureRef">
+                <label>Référence de réservation</label>
+                <input type="text" id="infoLocationRef" placeholder="Référence location"/>
+              </div>
+              <div class="form-group" id="locationVoitureLieu">
+                <label>Lieu de prise en charge</label>
+                <input type="text" id="infoLocationLieu" placeholder="Agence aéroport, ville…"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bagages -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🧳</span><h2>Bagages autorisés</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Bagage cabine</label>
+                <select id="infoBagageCabine" onchange="updateChecklistOnChange()">
+                  <option value="aucun">Aucun</option>
+                  <option value="petit">Petit (sac à dos, 10kg)</option>
+                  <option value="standard">Standard (55x35x25cm, 10-12kg)</option>
+                  <option value="grand">Grand cabine (56x45x25cm)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Bagage en soute</label>
+                <select id="infoBagageSoute" onchange="updateChecklistOnChange()">
+                  <option value="aucun">Aucun</option>
+                  <option value="20kg">20 kg</option>
+                  <option value="23kg">23 kg</option>
+                  <option value="30kg">30 kg</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Notes bagages</label>
+                <textarea id="infoBagagesNotes" rows="2" placeholder="Restrictions spéciales, liquides…"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Assurance & Santé -->
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🏥</span><h2>Assurance &amp; Santé</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Assurance voyage ?</label>
+                <select id="infoAssurance">
+                  <option value="non">Non</option>
+                  <option value="cb">Via carte bancaire</option>
+                  <option value="souscrite">Souscrite séparément</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Numéro d'urgence assurance</label>
+                <input type="text" id="infoAssuranceTel" placeholder="+33 1 XX XX XX XX"/>
+              </div>
+              <div class="form-group">
+                <label>Groupe sanguin</label>
+                <input type="text" id="infoGroupeSanguin" placeholder="A+, O-, B+…"/>
+              </div>
+              <div class="form-group">
+                <label>Allergies / médicaments</label>
+                <textarea id="infoMedicaments" rows="2" placeholder="Informations médicales importantes…"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: CHECKLIST ========== -->
+      <div class="page hidden" id="page-checklist">
+        <div class="page-header">
+          <div>
+            <h1>✅ Checklist</h1>
+            <p class="subtitle">Suivez vos tâches de préparation</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" onclick="resetChecklist()">↺ Réinitialiser</button>
+            <button class="btn-primary" onclick="refreshChecklist()">🔄 Actualiser</button>
+          </div>
+        </div>
+        <div class="checklist-progress-wrap">
+          <div class="progress-label">
+            <span id="checklistProgressLabel">0 / 0 tâches complétées</span>
+            <span id="checklistProgressPct">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="checklistProgressFill"></div></div>
+        </div>
+        <div id="checklistContainer"></div>
+      </div>
+
+      <!-- ========== PAGE: BAGAGES ========== -->
+      <div class="page hidden" id="page-bagages">
+        <div class="page-header">
+          <div>
+            <h1>🧳 Préparation des bagages</h1>
+            <p class="subtitle">Liste de tout ce qu'il faut emporter</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" onclick="resetBagages()">↺ Réinitialiser</button>
+            <button class="btn-primary" onclick="addBagage()">＋ Ajouter</button>
+          </div>
+        </div>
+        <div class="bagage-progress-wrap">
+          <div class="progress-label">
+            <span id="bagageProgressLabel">0 / 0 articles préparés</span>
+            <span id="bagageProgressPct">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="bagageProgressFill"></div></div>
+        </div>
+        <div id="bagagesContainer"></div>
+
+        <div class="add-item-bar" id="addBagageBar" style="display:none">
+          <select id="newBagageCategorie">
+            <option value="Vêtements">👔 Vêtements</option>
+            <option value="Hygiène">🧴 Hygiène</option>
+            <option value="Électronique">🔌 Électronique</option>
+            <option value="Documents">📄 Documents</option>
+            <option value="Médicaments">💊 Médicaments</option>
+            <option value="Loisirs">🎮 Loisirs</option>
+            <option value="Divers">📦 Divers</option>
+          </select>
+          <input type="text" id="newBagageNom" placeholder="Nom de l'article…" onkeypress="if(event.key==='Enter') confirmAddBagage()"/>
+          <button class="btn-primary" onclick="confirmAddBagage()">Ajouter</button>
+          <button class="btn-secondary" onclick="cancelAddBagage()">Annuler</button>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: DOCUMENTS ========== -->
+      <div class="page hidden" id="page-documents">
+        <div class="page-header">
+          <div>
+            <h1>📄 Documents importants</h1>
+            <p class="subtitle">Toutes vos informations et références en un coup d'œil</p>
+          </div>
+        </div>
+        <div id="documentsContainer"></div>
+      </div>
+
+      <!-- ========== PAGE: À VISITER ========== -->
+      <div class="page hidden" id="page-visiter">
+        <div class="page-header">
+          <div>
+            <h1>📍 À visiter</h1>
+            <p class="subtitle" id="visiterSubtitle">Planifiez vos visites et sorties</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" onclick="triParDistance()">📏 Trier par distance</button>
+            <button class="btn-primary" onclick="showAddLieu()">＋ Ajouter un lieu</button>
+          </div>
+        </div>
+
+        <div class="visiter-filters">
+          <button class="filter-btn active" data-filter="tous" onclick="filterLieux('tous', this)">Tous</button>
+          <button class="filter-btn" data-filter="monument" onclick="filterLieux('monument', this)">🏛️ Monuments</button>
+          <button class="filter-btn" data-filter="restaurant" onclick="filterLieux('restaurant', this)">🍽️ Restos</button>
+          <button class="filter-btn" data-filter="nature" onclick="filterLieux('nature', this)">🌿 Nature</button>
+          <button class="filter-btn" data-filter="musee" onclick="filterLieux('musee', this)">🖼️ Musées</button>
+          <button class="filter-btn" data-filter="shopping" onclick="filterLieux('shopping', this)">🛍️ Shopping</button>
+          <button class="filter-btn" data-filter="autre" onclick="filterLieux('autre', this)">📌 Autre</button>
+        </div>
+
+        <div id="lieuxContainer"></div>
+
+        <!-- Modal Ajouter lieu -->
+        <div class="modal hidden" id="modalAddLieu">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>📍 Ajouter un lieu</h3>
+              <button class="modal-close" onclick="closeModal('modalAddLieu')">✕</button>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Nom du lieu *</label>
+                <input type="text" id="newLieuNom" placeholder="ex: Sagrada Família"/>
+              </div>
+              <div class="form-group">
+                <label>Catégorie</label>
+                <select id="newLieuCategorie">
+                  <option value="monument">🏛️ Monument / Site</option>
+                  <option value="restaurant">🍽️ Restaurant / Bar</option>
+                  <option value="nature">🌿 Nature / Plage</option>
+                  <option value="musee">🖼️ Musée / Galerie</option>
+                  <option value="shopping">🛍️ Shopping</option>
+                  <option value="autre">📌 Autre</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Adresse</label>
+                <input type="text" id="newLieuAdresse" placeholder="Adresse complète"/>
+              </div>
+              <div class="form-group">
+                <label>Distance estimée depuis l'hébergement</label>
+                <input type="text" id="newLieuDistance" placeholder="ex: 2.5 km, 30 min"/>
+              </div>
+              <div class="form-group full-width">
+                <label>Notes / Infos pratiques</label>
+                <textarea id="newLieuNotes" rows="2" placeholder="Prix, horaires, conseils…"></textarea>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-secondary" onclick="closeModal('modalAddLieu')">Annuler</button>
+              <button class="btn-primary" onclick="confirmAddLieu()">Ajouter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: BUDGET ========== -->
+      <div class="page hidden" id="page-budget">
+        <div class="page-header">
+          <div>
+            <h1>💶 Budget</h1>
+            <p class="subtitle">Suivez vos dépenses de voyage</p>
+          </div>
+          <button class="btn-primary" onclick="showAddDepense()">＋ Ajouter</button>
+        </div>
+        <div class="budget-summary" id="budgetSummary"></div>
+        <div id="budgetContainer"></div>
+
+        <!-- Modal dépense -->
+        <div class="modal hidden" id="modalAddDepense">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>💶 Ajouter une dépense</h3>
+              <button class="modal-close" onclick="closeModal('modalAddDepense')">✕</button>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Catégorie</label>
+                <select id="newDepenseCat">
+                  <option value="transport">✈️ Transport</option>
+                  <option value="hebergement">🏨 Hébergement</option>
+                  <option value="restauration">🍽️ Restauration</option>
+                  <option value="activites">🎡 Activités</option>
+                  <option value="shopping">🛍️ Shopping</option>
+                  <option value="sante">💊 Santé</option>
+                  <option value="autre">📦 Divers</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="newDepenseDesc" placeholder="ex: Billet d'avion aller"/>
+              </div>
+              <div class="form-group">
+                <label>Montant (€)</label>
+                <input type="number" id="newDepenseMontant" min="0" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="form-group">
+                <label>Type</label>
+                <select id="newDepenseType">
+                  <option value="prevu">Prévu</option>
+                  <option value="reel">Réel (dépensé)</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-secondary" onclick="closeModal('modalAddDepense')">Annuler</button>
+              <button class="btn-primary" onclick="confirmAddDepense()">Ajouter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main><!-- end main-content -->
+
+    <!-- Toast notification -->
+    <div class="toast hidden" id="toast"></div>
+
+    <!-- Modal nouveau voyage -->
+    <div class="modal hidden" id="modalNewTrip">
+      <div class="modal-content modal-sm">
+        <div class="modal-header">
+          <h3>✈️ Nouveau voyage</h3>
+          <button class="modal-close" onclick="closeModal('modalNewTrip')">✕</button>
+        </div>
+        <div class="form-group">
+          <label>Nom du voyage</label>
+          <input type="text" id="newTripName" placeholder="ex: Vacances Barcelone 2025" onkeypress="if(event.key==='Enter') confirmNewTrip()"/>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closeModal('modalNewTrip')">Annuler</button>
+          <button class="btn-primary" onclick="confirmNewTrip()">Créer</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end #app -->
+
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
