@@ -175,8 +175,9 @@ var INFO_FIELDS = [
   'infoTypeHebergement','infoNomHebergement','infoAdresseHebergement','infoTelHebergement',
   'infoRefHebergement','infoLienHebergement',
   'infoTransportAller','infoAeroportDepart','infoAeroportArrivee','infoNumVolAller',
-  'infoHeureDepart','infoHeureArrivee','infoPNRAller',
-  'infoTransportRetour','infoNumVolRetour','infoHeureDepartRetour','infoPNRRetour',
+  'infoHeureDepart','infoHeureArrivee','infoPNRAller','infoCompagnieAller','infoTerminalAller','infoLienTicketAller',
+  'infoTransportRetour','infoAeroportRetourDepart','infoAeroportRetourArrivee','infoNumVolRetour',
+  'infoHeureDepartRetour','infoHeureArriveeRetour','infoPNRRetour','infoCompagnieRetour','infoTerminalRetour','infoLienTicketRetour',
   'infoParkingReserve','infoParkingNom','infoParkingRef','infoTransfertNotes',
   'infoLocationVoiture','infoLocationSociete','infoLocationRef','infoLocationLieu',
   'infoBagageCabine','infoBagageSoute','infoBagagesNotes',
@@ -197,6 +198,22 @@ function saveInfos() {
   toast('💾 Informations enregistrées', 'success');
 }
 
+// Pré-remplir datetime-local de départ/retour quand les dates du voyage changent
+function prefillTransportDates() {
+  var d1 = document.getElementById('infoDateDepart') ? document.getElementById('infoDateDepart').value : '';
+  var d2 = document.getElementById('infoDateRetour') ? document.getElementById('infoDateRetour').value : '';
+  var hdAller = document.getElementById('infoHeureDepart');
+  var hdRetour = document.getElementById('infoHeureDepartRetour');
+  // Pré-remplir seulement si le champ est vide
+  if (hdAller && !hdAller.value && d1) {
+    hdAller.value = d1 + 'T08:00';
+  }
+  if (hdRetour && !hdRetour.value && d2) {
+    hdRetour.value = d2 + 'T14:00';
+  }
+  updateNuitsDisplay();
+}
+
 function loadCurrentTrip() {
   var trip = currentTrip();
   INFO_FIELDS.forEach(function(id) {
@@ -205,6 +222,13 @@ function loadCurrentTrip() {
   });
   updateSubtitle();
   updateNuitsDisplay();
+  // Pré-remplir les dates transport uniquement si champs encore vides
+  var hdAller = document.getElementById('infoHeureDepart');
+  var hdRetour = document.getElementById('infoHeureDepartRetour');
+  var d1 = document.getElementById('infoDateDepart') ? document.getElementById('infoDateDepart').value : '';
+  var d2 = document.getElementById('infoDateRetour') ? document.getElementById('infoDateRetour').value : '';
+  if (hdAller && !hdAller.value && d1) hdAller.value = d1 + 'T08:00';
+  if (hdRetour && !hdRetour.value && d2) hdRetour.value = d2 + 'T14:00';
   updateBadges();
   var p = state.currentPage;
   if (p === 'checklist') refreshChecklist();
@@ -287,20 +311,261 @@ var PAYS_LIST = [
   'Turquie','Ukraine','Uruguay','Vatican','Venezuela','Vietnam','Zimbabwe'
 ];
 
-var VILLES_LIST = [
-  'Abidjan','Abou Dabi','Accra','Agadir','Alger','Alicante','Amsterdam','Athènes',
-  'Atlanta','Auckland','Bangkok','Barcelone','Beijing','Beyrouth','Bogotá','Bordeaux',
-  'Bruxelles','Budapest','Buenos Aires','Cancún','Cape Town','Casablanca','Chicago',
-  'Copenhague','Dakar','Doha','Dubai','Dublin','Édimbourg','Florence','Francfort',
-  'Genève','Hong Kong','Istanbul','Jakarta','Johannesburg','Kuala Lumpur','Lagos',
-  'Lima','Lisbonne','Londres','Los Angeles','Lyon','Madrid','Malaga','Marrakech',
-  'Marseille','Miami','Milan','Montréal','Moscou','Mumbai','Munich','Nairobi',
-  'Naples','New York','Nice','Oslo','Palma de Majorque','Paris','Prague','Québec',
-  'Rabat','Reykjavik','Rio de Janeiro','Rome','Saint-Pétersbourg','Santiago',
-  'São Paulo','Séoul','Séville','Shanghai','Singapour','Stockholm','Sydney',
-  'Tenerife','Tokyo','Toronto','Tunis','Valence','Vancouver','Varsovie','Vienne',
-  'Zurich'
+// Villes globales (liste étendue ~500 villes)
+var VILLES_GLOBALES = [
+  // France
+  'Paris','Lyon','Marseille','Toulouse','Nice','Nantes','Strasbourg','Montpellier','Bordeaux',
+  'Lille','Rennes','Reims','Saint-Étienne','Toulon','Grenoble','Dijon','Angers','Nîmes',
+  'Aix-en-Provence','Clermont-Ferrand','Brest','Tours','Amiens','Metz','Perpignan','Caen',
+  'Rouen','Nancy','Avignon','Orléans','Mulhouse','Cannes','Antibes','Montauban','La Rochelle',
+  'Biarritz','Bayonne','Pau','Annecy','Chambéry','Ajaccio','Bastia',
+  // Espagne
+  'Madrid','Barcelone','Valence','Séville','Saragosse','Málaga','Murcie','Palma de Majorque',
+  'Las Palmas','Bilbao','Alicante','Cordoue','Valladolid','Vigo','Gijón','Grenade','Cadix',
+  'Ibiza','Tenerife','Lanzarote','Fuerteventura','Saint-Sébastien','Santander','Salamanque',
+  'Tolède','Burgos','León',
+  // Italie
+  'Rome','Milan','Naples','Turin','Palerme','Gênes','Bologne','Florence','Bari','Catane',
+  'Venise','Vérone','Messine','Padoue','Trieste','Tarente','Brescia','Prato','Parme','Modène',
+  'Reggio de Calabre','Livourne','Cagliari','Ferrare','Bolzano','Trente','Pérouse','Sienne',
+  'Ravenne','Ancône','Amalfi','Capri','Positano','Portofino','Cinque Terre','Côme','Bellagio',
+  // Portugal
+  'Lisbonne','Porto','Braga','Amadora','Setúbal','Coimbra','Funchal','Faro','Évora',
+  'Sintra','Cascais','Albufeira','Lagos','Portimão','Tavira',
+  // Grèce
+  'Athènes','Thessalonique','Héraklion','Patras','Larissa','Volos','Ioannina','Kavala',
+  'Santorin','Mykonos','Rhodes','Corfou','Zakynthos','Skiathos','Paros','Naxos','Kos','Crete',
+  // Allemagne
+  'Berlin','Hambourg','Munich','Cologne','Francfort','Stuttgart','Düsseldorf','Leipzig',
+  'Dortmund','Essen','Bremen','Dresde','Hanovre','Nuremberg','Duisbourg','Bochum','Wuppertal',
+  'Bielefeld','Bonn','Mannheim','Karlsruhe','Münster','Augsbourg','Wiesbaden','Heidelberg',
+  'Fribourg-en-Brisgau','Kiel','Mayence','Aix-la-Chapelle','Trèves','Constance','Bamberg',
+  // Royaume-Uni
+  'Londres','Birmingham','Manchester','Leeds','Glasgow','Sheffield','Bradford','Liverpool',
+  'Édimbourg','Bristol','Cardiff','Belfast','Leicester','Nottingham','Coventry','Hull',
+  'Bradford','Southampton','Oxford','Cambridge','Bath','Brighton','York','Chester','Exeter',
+  'Inverness','Aberdeen','Dundee','Stirling',
+  // Pays-Bas
+  'Amsterdam','Rotterdam','La Haye','Utrecht','Eindhoven','Tilburg','Groningue','Almere',
+  'Breda','Nimègue','Enschede','Apeldoorn','Leyde','Delft','Maastricht','Zwolle',
+  // Belgique
+  'Bruxelles','Anvers','Gand','Charleroi','Liège','Bruges','Namur','Louvain','Mons',
+  'Aalst','Genk','Hasselt','Tournai',
+  // Suisse
+  'Zurich','Genève','Bâle','Berne','Lausanne','Winterthour','Saint-Gall','Lucerne',
+  'Lugano','Bienne','Thoune','Coire','Zoug','Fribourg','Sion','Interlaken',
+  // Autriche
+  'Vienne','Graz','Linz','Salzbourg','Innsbruck','Klagenfurt','Villach','Wels','Steyr',
+  // Scandinavie
+  'Stockholm','Göteborg','Malmö','Uppsala','Oslo','Bergen','Stavanger','Trondheim',
+  'Copenhague','Aarhus','Odense','Helsinki','Tampere','Turku','Espoo','Oulu',
+  'Reykjavik','Akureyri',
+  // Europe de l'Est
+  'Prague','Brno','Ostrava','Varsovie','Cracovie','Łódź','Wrocław','Poznań','Gdańsk',
+  'Budapest','Debrecen','Miskolc','Bratislava','Košice','Bucarest','Cluj-Napoca','Timișoara',
+  'Sofia','Plovdiv','Varna','Zagreb','Split','Dubrovnik','Sarajevo','Belgrade','Novi Sad',
+  'Ljubljana','Tallinn','Riga','Vilnius','Minsk','Kiev','Lviv','Odessa','Kharkiv',
+  // Turquie
+  'Istanbul','Ankara','Izmir','Bursa','Antalya','Adana','Konya','Gaziantep','Trabzon',
+  'Cappadoce','Pamukkale','Éphèse','Bodrum','Marmaris','Alanya','Belek',
+  // Russie
+  'Moscou','Saint-Pétersbourg','Novossibirsk','Iekaterinbourg','Kazan','Nijni Novgorod',
+  'Vladivostok','Sotchi','Krasnodar',
+  // Afrique du Nord
+  'Casablanca','Rabat','Fès','Marrakech','Tanger','Agadir','Meknès','Oujda','Tétouan',
+  'Alger','Oran','Constantine','Annaba','Batna','Sétif','Tunis','Sfax','Sousse','Monastir',
+  'Le Caire','Alexandrie','Louxor','Assouan','Hurghada','Charm el-Cheikh','Dahab',
+  // Afrique subsaharienne
+  'Dakar','Abidjan','Accra','Lagos','Nairobi','Le Cap','Johannesburg','Durban','Pretoria',
+  'Addis-Abeba','Dar es Salaam','Maputo','Kampala','Kigali','Douala','Yaoundé',
+  'Abuja','Libreville','Brazzaville','Luanda','Antananarivo','Île Maurice',
+  // Moyen-Orient
+  'Dubai','Abu Dhabi','Dubaï','Sharjah','Doha','Koweït','Manama','Mascate','Riyad','Djeddah',
+  'Tel Aviv','Jérusalem','Haïfa','Beyrouth','Amman','Bagdad','Téhéran','Ispahan',
+  // Inde & Asie du Sud
+  'Mumbai','Delhi','Bangalore','Hyderabad','Ahmedabad','Chennai','Kolkata','Surat','Pune',
+  'Jaipur','Lucknow','Kanpur','Nagpur','Indore','Thane','Bhopal','Visakhapatnam','Goa',
+  'Agra','Varanasi','Amritsar','Chandigarh','Kochi','Trivandrum','Mysore','Jodhpur','Udaipur',
+  'Colombo','Negombo','Kandy','Galle','Katmandou','Pokhara','Dhaka','Karachi','Lahore',
+  // Asie du Sud-Est
+  'Bangkok','Chiang Mai','Phuket','Pattaya','Koh Samui','Koh Phangan','Kanchanaburi',
+  'Singapour','Kuala Lumpur','Penang','Langkawi','Kota Kinabalu','Johor Bahru',
+  'Jakarta','Bali','Ubud','Lombok','Yogyakarta','Surabaya','Bandung','Medan',
+  'Ho Chi Minh-Ville','Hanoi','Da Nang','Hoi An','Hué','Nha Trang','Ha Long',
+  'Phnom Penh','Siem Reap','Vientiane','Luang Prabang','Rangoun','Mandalay',
+  'Manille','Cebu','Boracay','Palawan','Davao',
+  // Chine & Asie de l'Est
+  'Pékin','Shanghai','Guangzhou','Shenzhen','Chengdu','Xi\'an','Hangzhou','Wuhan',
+  'Chongqing','Nanjing','Tianjin','Suzhou','Zhengzhou','Qingdao','Xiamen','Guilin','Lijiang',
+  'Hong Kong','Macao','Taipei','Tainan','Kaohsiung',
+  'Tokyo','Osaka','Kyoto','Yokohama','Nagoya','Sapporo','Fukuoka','Kobe','Hiroshima','Nara',
+  'Séoul','Busan','Incheon','Daegu','Gwangju','Jeju',
+  // Amériques
+  'New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphie','San Antonio',
+  'San Diego','Dallas','San José','Austin','Jacksonville','Fort Worth','Columbus','Charlotte',
+  'Indianapolis','San Francisco','Seattle','Denver','Nashville','Washington','Boston','Miami',
+  'Las Vegas','Portland','Memphis','Louisville','Baltimore','Atlanta','Montréal','Toronto',
+  'Vancouver','Calgary','Ottawa','Québec','Winnipeg','Halifax',
+  'Mexico','Guadalajara','Monterrey','Cancún','Playa del Carmen','Tulum','Puerto Vallarta',
+  'Havane','Santiago','Buenos Aires','Montevideo','Lima','Bogotá','Medellín','Cali',
+  'São Paulo','Rio de Janeiro','Brasília','Salvador','Fortaleza','Recife','Belo Horizonte',
+  'Quito','La Paz','Sucre','Asunción','Caracas',
+  // Océanie
+  'Sydney','Melbourne','Brisbane','Perth','Adélaïde','Canberra','Cairns','Darwin','Hobart',
+  'Auckland','Wellington','Christchurch','Queenstown','Rotorua',
+  'Fidji','Bora Bora','Papeete','Nouméa',
+  // Maldives / Îles
+  'Malé','Hulhumalé','Maafushi','Maldives',
+  'Pointe-à-Pitre','Fort-de-France','Saint-Denis','Papeete','Cayenne',
 ];
+
+// Villes par pays (sous-liste affinée quand un pays est saisi)
+var VILLES_PAR_PAYS = {
+  'france': ['Paris','Lyon','Marseille','Toulouse','Nice','Nantes','Strasbourg','Montpellier',
+    'Bordeaux','Lille','Rennes','Reims','Saint-Étienne','Toulon','Grenoble','Dijon','Angers',
+    'Nîmes','Aix-en-Provence','Clermont-Ferrand','Brest','Tours','Amiens','Metz','Perpignan',
+    'Caen','Rouen','Nancy','Avignon','Orléans','Mulhouse','Cannes','Antibes','La Rochelle',
+    'Biarritz','Bayonne','Pau','Annecy','Chambéry','Ajaccio','Bastia','Metz','Colmar'],
+  'espagne': ['Madrid','Barcelone','Valence','Séville','Saragosse','Málaga','Murcie',
+    'Palma de Majorque','Las Palmas','Bilbao','Alicante','Cordoue','Valladolid','Vigo',
+    'Grenade','Cadix','Ibiza','Tenerife','Lanzarote','Fuerteventura','Saint-Sébastien',
+    'Santander','Salamanque','Tolède','Burgos','Léon','Tarragone','Gérone'],
+  'italie': ['Rome','Milan','Naples','Turin','Palerme','Gênes','Bologne','Florence','Bari',
+    'Catane','Venise','Vérone','Messine','Padoue','Trieste','Tarente','Brescia','Parme',
+    'Modène','Cagliari','Ferrare','Bolzano','Pérouse','Sienne','Ravenne','Ancône','Amalfi',
+    'Capri','Positano','Portofino','Cinque Terre','Côme','Bellagio'],
+  'portugal': ['Lisbonne','Porto','Braga','Setúbal','Coimbra','Funchal','Faro','Évora',
+    'Sintra','Cascais','Albufeira','Lagos','Portimão','Tavira','Nazaré','Óbidos'],
+  'grece': ['Athènes','Thessalonique','Héraklion','Patras','Santorin','Mykonos','Rhodes',
+    'Corfou','Zakynthos','Skiathos','Paros','Naxos','Kos','La Canée','Rethymnon',
+    'Ioannina','Kavala','Volos','Kalamata','Larissa'],
+  'allemagne': ['Berlin','Hambourg','Munich','Cologne','Francfort','Stuttgart','Düsseldorf',
+    'Leipzig','Dresde','Hanovre','Nuremberg','Bremen','Bonn','Heidelberg','Karlsruhe',
+    'Fribourg-en-Brisgau','Augsbourg','Wiesbaden','Trèves','Constance','Bamberg','Rothenburg'],
+  'royaume-uni': ['Londres','Édimbourg','Manchester','Birmingham','Liverpool','Bristol',
+    'Glasgow','Leeds','Cardiff','Belfast','Sheffield','Brighton','Oxford','Cambridge',
+    'Bath','York','Chester','Exeter','Inverness','Aberdeen','Dundee'],
+  'pays-bas': ['Amsterdam','Rotterdam','La Haye','Utrecht','Eindhoven','Groningue',
+    'Almere','Breda','Nimègue','Leyde','Delft','Maastricht','Haarlem','Zwolle'],
+  'belgique': ['Bruxelles','Anvers','Gand','Bruges','Liège','Namur','Louvain','Mons',
+    'Charleroi','Tournai','Hasselt','Genk'],
+  'suisse': ['Zurich','Genève','Bâle','Berne','Lausanne','Lucerne','Lugano','Bienne',
+    'Thoune','Saint-Gall','Interlaken','Grindelwald','Zermatt','Verbier','Crans-Montana'],
+  'autriche': ['Vienne','Graz','Salzbourg','Innsbruck','Linz','Klagenfurt','Hallstatt','Zell am See'],
+  'maroc': ['Casablanca','Marrakech','Fès','Rabat','Tanger','Agadir','Meknès','Oujda',
+    'Tétouan','Essaouira','Chefchaouen','Ifrane','Ouarzazate','Merzouga','Dakhla'],
+  'tunisie': ['Tunis','Sfax','Sousse','Monastir','Kairouan','Bizerte','Gabès','Jerba','Hammamet','Djerba'],
+  'algerie': ['Alger','Oran','Constantine','Annaba','Batna','Sétif','Blida','Tlemcen','Béjaïa'],
+  'egypte': ['Le Caire','Alexandrie','Louxor','Assouan','Hurghada','Charm el-Cheikh','Dahab','Marsa Alam'],
+  'turquie': ['Istanbul','Ankara','Izmir','Antalya','Bursa','Bodrum','Marmaris','Alanya',
+    'Cappadoce','Pamukkale','Göreme','Kaş','Fethiye','Ölüdeniz','Trabzon'],
+  'etats-unis': ['New York','Los Angeles','Chicago','San Francisco','Miami','Las Vegas',
+    'Seattle','Boston','Washington','Houston','Phoenix','Denver','Nashville','Atlanta',
+    'San Diego','Portland','New Orleans','Austin','Honolulu','Orlando'],
+  'japon': ['Tokyo','Osaka','Kyoto','Yokohama','Nagoya','Sapporo','Fukuoka','Kobe',
+    'Hiroshima','Nara','Nikko','Hakone','Kamakura','Nagasaki','Okinawa','Kanazawa'],
+  'thai lande': ['Bangkok','Chiang Mai','Phuket','Pattaya','Koh Samui','Koh Phangan',
+    'Kanchanaburi','Hua Hin','Pai','Chiang Rai','Ayutthaya','Sukhothai'],
+  'thailande': ['Bangkok','Chiang Mai','Phuket','Pattaya','Koh Samui','Koh Phangan',
+    'Kanchanaburi','Hua Hin','Pai','Chiang Rai','Ayutthaya','Sukhothai'],
+  'vietnam': ['Ho Chi Minh-Ville','Hanoi','Da Nang','Hoi An','Hué','Nha Trang','Ha Long',
+    'Sapa','Mũi Né','Phú Quốc','Dalat','Can Tho'],
+  'indonesie': ['Bali','Jakarta','Ubud','Lombok','Yogyakarta','Surabaya','Bandung','Medan',
+    'Makassar','Padang','Gili Islands','Labuan Bajo'],
+  'inde': ['Mumbai','Delhi','Bangalore','Jaipur','Agra','Varanasi','Goa','Kochi','Mysore',
+    'Jodhpur','Udaipur','Rishikesh','Dharamsala','Amritsar','Chennai','Kolkata'],
+  'chine': ['Pékin','Shanghai','Guangzhou','Shenzhen','Chengdu','Xi\'an','Hangzhou',
+    'Guilin','Lijiang','Zhangjiajie','Pingyao','Suzhou','Wuhan','Chongqing','Kunming'],
+  'australie': ['Sydney','Melbourne','Brisbane','Perth','Adélaïde','Cairns','Darwin',
+    'Hobart','Gold Coast','Byron Bay','Uluru','Port Douglas'],
+  'canada': ['Toronto','Montréal','Vancouver','Calgary','Ottawa','Québec','Winnipeg',
+    'Halifax','Victoria','Banff','Whistler','Jasper'],
+  'bresil': ['Rio de Janeiro','São Paulo','Brasília','Salvador','Fortaleza','Recife',
+    'Belo Horizonte','Florianópolis','Foz do Iguaçu','Manaus','Natal','Maceió'],
+  'mexique': ['Mexico','Cancún','Playa del Carmen','Tulum','Puerto Vallarta','Los Cabos',
+    'Guadalajara','Monterrey','Oaxaca','San Miguel de Allende','Mérida','Chichen Itza'],
+  'argentie': ['Buenos Aires','Córdoba','Rosario','Mendoza','Bariloche','Ushuaia','El Calafate','Salta'],
+  'afrique du sud': ['Le Cap','Johannesburg','Durban','Pretoria','Port Elizabeth','Stellenbosch',
+    'Franschhoek','Knysna','Oudtshoorn','Hermanus','Plettenberg Bay'],
+  'kenya': ['Nairobi','Mombasa','Malindi','Lamu','Kisumu','Nakuru','Amboseli','Masai Mara'],
+  'tanzanie': ['Dar es Salaam','Zanzibar','Arusha','Kilimanjaro','Serengeti','Ngorongoro'],
+};
+
+function getVillesList() {
+  var pays = document.getElementById('infoPays') ? normalizeStr(document.getElementById('infoPays').value) : '';
+  // Try to match a country key
+  var found = null;
+  Object.keys(VILLES_PAR_PAYS).forEach(function(key) {
+    if (pays.indexOf(key.replace(/\s/g,'')) !== -1 || key.indexOf(pays.replace(/\s/g,'').slice(0,5)) !== -1) {
+      if (!found) found = key;
+    }
+  });
+  if (found) {
+    // Return country-specific list first, then append others not in it
+    var specific = VILLES_PAR_PAYS[found];
+    var others = VILLES_GLOBALES.filter(function(v) { return specific.indexOf(v) === -1; });
+    return specific.concat(others);
+  }
+  return VILLES_GLOBALES;
+}
+
+function initAutocompletes() {
+  setupAutocomplete('infoPays', PAYS_LIST, 8);
+  // Villes: dynamic based on pays
+  setupAutocompleteFunc('infoVille', getVillesList, 12);
+  setupAutocomplete('infoAeroportDepart', AEROPORTS_LIST, 8);
+  setupAutocomplete('infoAeroportArrivee', AEROPORTS_LIST, 8);
+  setupAutocomplete('infoAeroportRetourDepart', AEROPORTS_LIST, 8);
+  setupAutocomplete('infoAeroportRetourArrivee', AEROPORTS_LIST, 8);
+}
+
+// Variant of setupAutocomplete that calls a function to get the list (for dynamic lists)
+function setupAutocompleteFunc(inputId, listFn, maxItems) {
+  var input = document.getElementById(inputId);
+  if (!input) return;
+  maxItems = maxItems || 10;
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  var dd = document.createElement('div');
+  dd.style.cssText = [
+    'display:none','position:absolute','top:100%','left:0','right:0','z-index:500',
+    'background:var(--surface2)','border:1.5px solid var(--primary)',
+    'border-top:none','border-radius:0 0 8px 8px',
+    'max-height:220px','overflow-y:auto','box-shadow:0 8px 24px rgba(0,0,0,0.5)'
+  ].join(';');
+  wrap.appendChild(dd);
+
+  function show(val) {
+    if (!val || val.length < 1) { dd.style.display = 'none'; return; }
+    var q = normalizeStr(val);
+    var list = listFn();
+    var matches = list.filter(function(item) {
+      return normalizeStr(item).indexOf(q) !== -1;
+    }).slice(0, maxItems);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(function(m) {
+      var norm = normalizeStr(m);
+      var idx = norm.indexOf(q);
+      var display = idx >= 0
+        ? escHtml(m.slice(0, idx)) + '<strong style="color:var(--primary)">' + escHtml(m.slice(idx, idx + val.length)) + '</strong>' + escHtml(m.slice(idx + val.length))
+        : escHtml(m);
+      return '<div style="padding:9px 14px;cursor:pointer;font-size:0.875rem;border-bottom:1px solid var(--border-light);transition:background 0.1s" ' +
+        'onmouseover="this.style.background=\'var(--surface)\'" ' +
+        'onmouseout="this.style.background=\'\'" ' +
+        'onmousedown="pickAC(event,\'' + inputId + '\',\'' + escHtml(m) + '\')">' + display + '</div>';
+    }).join('');
+    dd.style.display = 'block';
+  }
+
+  input.addEventListener('input', function() { show(input.value); });
+  input.addEventListener('focus', function() { show(input.value); });
+  input.addEventListener('blur', function() { setTimeout(function() { dd.style.display = 'none'; }, 200); });
+  input.addEventListener('keydown', function(e) { if (e.key === 'Escape') dd.style.display = 'none'; });
+}
 
 var AEROPORTS_LIST = [
   'CDG – Paris Charles-de-Gaulle','ORY – Paris Orly','LYS – Lyon Saint-Exupéry',
@@ -383,12 +648,7 @@ function pickAC(e, inputId, val) {
   if (inputId === 'infoDateDepart' || inputId === 'infoDateRetour') updateNuitsDisplay();
 }
 
-function initAutocompletes() {
-  setupAutocomplete('infoPays', PAYS_LIST, 8);
-  setupAutocomplete('infoVille', VILLES_LIST, 10);
-  setupAutocomplete('infoAeroportDepart', AEROPORTS_LIST, 8);
-  setupAutocomplete('infoAeroportArrivee', AEROPORTS_LIST, 8);
-}
+// (initAutocompletes defined above with dynamic villes-by-country)
 
 // ── CHECKLIST ──────────────────────────────────────────────
 function buildChecklist(infos) {
@@ -726,11 +986,14 @@ function renderDocuments() {
     '<div class="doc-grid">' +
     '<div class="doc-field"><span class="doc-field-label">Type</span>' + f(typeTransport[i.infoTransportAller] || i.infoTransportAller) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">N° vol / train</span>' + f(i.infoNumVolAller) + '</div>' +
-    '<div class="doc-field"><span class="doc-field-label">Aéroport départ</span>' + f(i.infoAeroportDepart) + '</div>' +
-    '<div class="doc-field"><span class="doc-field-label">Aéroport arrivée</span>' + f(i.infoAeroportArrivee) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport / Gare départ</span>' + f(i.infoAeroportDepart) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport / Gare arrivée</span>' + f(i.infoAeroportArrivee) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Heure départ</span>' + f(i.infoHeureDepart) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Heure arrivée</span>' + f(i.infoHeureArrivee) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Référence / PNR</span>' + f(i.infoPNRAller) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Compagnie</span>' + f(i.infoCompagnieAller) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Terminal / Voie</span>' + f(i.infoTerminalAller) + '</div>' +
+    (i.infoLienTicketAller ? '<div class="doc-field"><span class="doc-field-label">E-ticket aller</span>' + fLink(i.infoLienTicketAller) + '</div>' : '') +
     '</div></div>' +
 
     '<div class="doc-card">' +
@@ -738,8 +1001,14 @@ function renderDocuments() {
     '<div class="doc-grid">' +
     '<div class="doc-field"><span class="doc-field-label">Type</span>' + f(typeTransport[i.infoTransportRetour] || i.infoTransportRetour) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">N° vol / train</span>' + f(i.infoNumVolRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport / Gare départ</span>' + f(i.infoAeroportRetourDepart) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Aéroport / Gare arrivée</span>' + f(i.infoAeroportRetourArrivee) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Heure départ</span>' + f(i.infoHeureDepartRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Heure arrivée</span>' + f(i.infoHeureArriveeRetour) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Référence / PNR</span>' + f(i.infoPNRRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Compagnie</span>' + f(i.infoCompagnieRetour) + '</div>' +
+    '<div class="doc-field"><span class="doc-field-label">Terminal / Voie</span>' + f(i.infoTerminalRetour) + '</div>' +
+    (i.infoLienTicketRetour ? '<div class="doc-field"><span class="doc-field-label">E-ticket retour</span>' + fLink(i.infoLienTicketRetour) + '</div>' : '') +
     '</div></div>' +
 
     '<div class="doc-card">' +
@@ -963,9 +1232,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var d1 = document.getElementById('infoDateDepart');
   var d2 = document.getElementById('infoDateRetour');
-  if (d1) d1.addEventListener('change', updateNuitsDisplay);
-  if (d2) d2.addEventListener('change', updateNuitsDisplay);
-  updateNuitsDisplay();
+  if (d1) d1.addEventListener('change', prefillTransportDates);
+  if (d2) d2.addEventListener('change', prefillTransportDates);
+  prefillTransportDates();
 
   // Close dropdown on outside click
   document.addEventListener('click', function(e) {
