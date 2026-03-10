@@ -517,9 +517,8 @@
               <span>🟢 Vert</span> — Votre hébergement<br>
               <span>🔵 Bleu</span> — Monument / Site<br>
               <span>🟠 Orange</span> — Restaurant / Bar<br>
-              <span>🟣 Violet</span> — Musée / Galerie<br>
+              <span>🩵 Bleu clair</span> — Plage<br>
               <span>🩷 Rose</span> — Shopping<br>
-              <span>🔴 Rouge</span> — Autre lieu sauvegardé<br>
             </div>
             <hr style="border-color:#333;margin:10px 0"/>
             <b>Pour ajouter un lieu :</b>
@@ -530,7 +529,7 @@
             </ol>
           </div>
           <div class="embedded-map-search-row">
-            <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu (restaurant, monument, musée…)" autocomplete="off"/>
+            <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu (restaurant, monument, plage…)" autocomplete="off"/>
             <button class="btn-icon" onclick="locateMeVisiter()" title="Ma position">📍</button>
           </div>
           <div id="visiterGoogleMap" class="embedded-map embedded-map--tall"></div>
@@ -541,10 +540,8 @@
           <button class="filter-btn active" data-filter="tous" onclick="filterLieux('tous', this)">Tous</button>
           <button class="filter-btn" data-filter="monument" onclick="filterLieux('monument', this)">🏛️ Monuments</button>
           <button class="filter-btn" data-filter="restaurant" onclick="filterLieux('restaurant', this)">🍽️ Restos</button>
-          <button class="filter-btn" data-filter="nature" onclick="filterLieux('nature', this)">🌿 Nature</button>
-          <button class="filter-btn" data-filter="musee" onclick="filterLieux('musee', this)">🖼️ Musées</button>
+          <button class="filter-btn" data-filter="plage" onclick="filterLieux('plage', this)">🏖️ Plages</button>
           <button class="filter-btn" data-filter="shopping" onclick="filterLieux('shopping', this)">🛍️ Shopping</button>
-          <button class="filter-btn" data-filter="autre" onclick="filterLieux('autre', this)">📌 Autre</button>
         </div>
 
         <div id="lieuxContainer"></div>
@@ -566,11 +563,11 @@
                 <select id="newLieuCategorie">
                   <option value="monument">🏛️ Monument / Site</option>
                   <option value="restaurant">🍽️ Restaurant / Bar</option>
-                  <option value="nature">🌿 Nature / Plage</option>
-                  <option value="musee">🖼️ Musée / Galerie</option>
+                  <option value="plage">🏖️ Plage</option>
                   <option value="shopping">🛍️ Shopping</option>
-                  <option value="autre">📌 Autre</option>
                 </select>
+              </div>
+              <input type="hidden" id="newLieuPlaceId" value=""/>
               </div>
               <div class="form-group full-width">
                 <label>Adresse</label>
