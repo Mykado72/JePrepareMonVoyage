@@ -1191,206 +1191,221 @@ var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', nature:'🌿', muse
 var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', nature:'Nature', musee:'Musée', shopping:'Shopping', autre:'Autre' };
 var currentLieuFilter = 'tous';
 
-// ── LEAFLET MAP & NOMINATIM ────────────────────────────────
-var _leafletMap = null;
-var _leafletMarker = null;
-var _editingLieuId = null; // null = ajout, string = édition
+// ── GOOGLE MAPS API ────────────────────────────────────────
+var _gmap = null;
+var _gmapMarker = null;
+var _gmapAutocomplete = null;
+var _gmapHebMarker = null;
+var _editingLieuId = null;
+var _googleMapsReady = false;
 
-function initLeafletMap() {
-  if (_leafletMap) {
-    _leafletMap.invalidateSize();
-    return;
-  }
-  if (typeof L === 'undefined') return;
+// Callback appelé par le SDK Google Maps une fois chargé
+function onGoogleMapsReady() {
+  _googleMapsReady = true;
+}
+
+function initGoogleMap() {
+  if (!_googleMapsReady || !window.google) return;
 
   var trip = currentTrip();
-  var centerLat = 48.8566, centerLon = 2.3522, zoom = 5; // Paris par défaut
-  if (trip && trip.infos) {
-    // Si l'hébergement a des coords, centrer dessus
-    if (trip.infos._hebLat && trip.infos._hebLon) {
-      centerLat = parseFloat(trip.infos._hebLat);
-      centerLon = parseFloat(trip.infos._hebLon);
-      zoom = 13;
-    }
+  var center = { lat: 48.8566, lng: 2.3522 }; // Paris par défaut
+  if (trip && trip.infos && trip.infos._hebLat) {
+    center = { lat: parseFloat(trip.infos._hebLat), lng: parseFloat(trip.infos._hebLon) };
   }
 
-  _leafletMap = L.map('leafletMap', { zoomControl: true }).setView([centerLat, centerLon], zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 19
-  }).addTo(_leafletMap);
+  _gmap = new google.maps.Map(document.getElementById('googleMap'), {
+    center: center,
+    zoom: trip && trip.infos && trip.infos._hebLat ? 13 : 5,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    styles: [
+      { featureType: 'all', elementType: 'geometry', stylers: [{ color: '#1e2130' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1321' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d3148' }] },
+      { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8899bb' }] },
+      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6677aa' }] },
+      { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#252840' }] },
+      { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#1a1e2e' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#13172a' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#8899bb' }] },
+    ]
+  });
 
-  // Clic sur la carte → placer un marqueur + géocoder l'adresse
-  _leafletMap.on('click', function(e) {
-    placeMarkerAndReverseGeocode(e.latlng.lat, e.latlng.lng);
+  // Marqueur hébergement (si coords disponibles)
+  if (trip && trip.infos && trip.infos._hebLat) {
+    _gmapHebMarker = new google.maps.Marker({
+      map: _gmap,
+      position: { lat: parseFloat(trip.infos._hebLat), lng: parseFloat(trip.infos._hebLon) },
+      title: trip.infos.infoNomHebergement || 'Hébergement',
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: '#4caf50',
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2
+      },
+      label: { text: '🏨', fontSize: '18px' }
+    });
+    new google.maps.InfoWindow({ content: '<b>🏨 ' + escHtml(trip.infos.infoNomHebergement || 'Hébergement') + '</b>' })
+      .open(_gmap, _gmapHebMarker);
+  }
+
+  // Clic sur la carte → placer un marqueur + géocoder
+  _gmap.addListener('click', function(e) {
+    placeGMapMarker(e.latLng.lat(), e.latLng.lng());
+    reverseGeocode(e.latLng.lat(), e.latLng.lng());
+  });
+
+  // Google Places Autocomplete sur le champ de recherche
+  _gmapAutocomplete = new google.maps.places.Autocomplete(
+    document.getElementById('mapSearchQuery'),
+    { language: 'fr' }
+  );
+  _gmapAutocomplete.bindTo('bounds', _gmap);
+  _gmapAutocomplete.addListener('place_changed', function() {
+    var place = _gmapAutocomplete.getPlace();
+    if (!place.geometry || !place.geometry.location) return;
+    onPlaceSelected(place);
   });
 }
 
-function placeMarker(lat, lon, label) {
-  if (!_leafletMap) return;
-  if (_leafletMarker) _leafletMap.removeLayer(_leafletMarker);
-  _leafletMarker = L.marker([lat, lon]).addTo(_leafletMap);
-  if (label) _leafletMarker.bindPopup(label).openPopup();
-  _leafletMap.setView([lat, lon], 15);
-  // Remplir coords
-  document.getElementById('newLieuCoords').value = lat.toFixed(6) + ', ' + lon.toFixed(6);
-  // Calculer distance hébergement
-  computeDistanceFromHeb(lat, lon);
-}
-
-function placeMarkerAndReverseGeocode(lat, lon) {
-  placeMarker(lat, lon, null);
-  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&accept-language=fr', {
-    headers: { 'Accept-Language': 'fr' }
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data && data.display_name) {
-      document.getElementById('newLieuAdresse').value = data.display_name;
-      if (!document.getElementById('newLieuNom').value && data.name) {
-        document.getElementById('newLieuNom').value = data.name || '';
-      }
+function placeGMapMarker(lat, lng, title) {
+  if (!_gmap) return;
+  if (_gmapMarker) _gmapMarker.setMap(null);
+  _gmapMarker = new google.maps.Marker({
+    map: _gmap,
+    position: { lat: lat, lng: lng },
+    title: title || '',
+    animation: google.maps.Animation.DROP,
+    icon: {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 10,
+      fillColor: '#2196F3',
+      fillOpacity: 1,
+      strokeColor: '#fff',
+      strokeWeight: 2
     }
-  })
-  .catch(function() {});
-}
-
-function searchOnMap() {
-  var q = document.getElementById('mapSearchQuery').value.trim();
-  if (!q) return;
-  var dest = getMapsDestination();
-  var full = dest ? q + ' ' + dest : q;
-  var resultsEl = document.getElementById('mapSearchResults');
-  resultsEl.innerHTML = '<div class="map-result-loading">🔍 Recherche en cours…</div>';
-
-  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(full) + '&limit=6&accept-language=fr&addressdetails=1')
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (!data || !data.length) {
-      resultsEl.innerHTML = '<div class="map-result-empty">Aucun résultat. Essayez avec le nom de ville.</div>';
-      return;
-    }
-    resultsEl.innerHTML = data.map(function(item, idx) {
-      return '<div class="map-result-item" onclick="selectMapResult(' + idx + ')" data-idx="' + idx + '">' +
-        '<span class="map-result-icon">' + getNominatimIcon(item.type, item.class) + '</span>' +
-        '<div class="map-result-info">' +
-        '<div class="map-result-name">' + escHtml(item.display_name.split(',')[0]) + '</div>' +
-        '<div class="map-result-addr">' + escHtml(item.display_name) + '</div>' +
-        '</div></div>';
-    }).join('');
-    // Stocker les résultats dans un attribut data
-    resultsEl._results = data;
-    // Si un seul résultat, le sélectionner directement
-    if (data.length === 1) selectMapResult(0);
-  })
-  .catch(function() {
-    resultsEl.innerHTML = '<div class="map-result-empty">⚠️ Erreur de connexion. Vérifiez votre réseau.</div>';
   });
+  _gmap.panTo({ lat: lat, lng: lng });
+  _gmap.setZoom(16);
+  document.getElementById('newLieuCoords').value = lat.toFixed(6) + ', ' + lng.toFixed(6);
+  computeDistanceFromHeb(lat, lng);
 }
 
-function selectMapResult(idx) {
-  var resultsEl = document.getElementById('mapSearchResults');
-  var data = resultsEl._results;
-  if (!data || !data[idx]) return;
-  var item = data[idx];
-  var lat = parseFloat(item.lat);
-  var lon = parseFloat(item.lon);
+function onPlaceSelected(place) {
+  var lat = place.geometry.location.lat();
+  var lng = place.geometry.location.lng();
 
-  // Highlight sélectionné
-  resultsEl.querySelectorAll('.map-result-item').forEach(function(el) { el.classList.remove('selected'); });
-  var sel = resultsEl.querySelector('[data-idx="' + idx + '"]');
-  if (sel) sel.classList.add('selected');
-
-  // Placer le marqueur
-  placeMarker(lat, lon, item.display_name.split(',')[0]);
+  placeGMapMarker(lat, lng, place.name);
 
   // Remplir les champs
-  document.getElementById('newLieuAdresse').value = item.display_name;
-  var nomField = document.getElementById('newLieuNom');
-  if (!nomField.value) {
-    nomField.value = item.display_name.split(',')[0];
+  document.getElementById('newLieuNom').value     = place.name || '';
+  document.getElementById('newLieuAdresse').value = place.formatted_address || '';
+
+  // Note Google
+  var ratingEl = document.getElementById('newLieuRating');
+  if (ratingEl) {
+    ratingEl.value = place.rating
+      ? '⭐ ' + place.rating + ' / 5' + (place.user_ratings_total ? '  (' + place.user_ratings_total + ' avis)' : '')
+      : '—';
   }
-  // Auto-détecter catégorie
-  var cat = guessCategoryFromNominatim(item.type, item.class, item.display_name);
+
+  // Détecter la catégorie depuis les types Google Places
+  var cat = guessCategoryFromGoogleTypes(place.types || []);
   if (cat) document.getElementById('newLieuCategorie').value = cat;
-}
 
-function getNominatimIcon(type, cls) {
-  if (cls === 'amenity') {
-    if (['restaurant','fast_food','cafe','bar','pub'].indexOf(type) !== -1) return '🍽️';
-    if (['museum','theatre','cinema'].indexOf(type) !== -1) return '🖼️';
-    if (['hospital','pharmacy','clinic'].indexOf(type) !== -1) return '💊';
-    if (['hotel','hostel','guest_house'].indexOf(type) !== -1) return '🏨';
-    if (['supermarket','marketplace'].indexOf(type) !== -1) return '🛒';
+  // Viewport pour ajuster le zoom
+  if (place.geometry.viewport) {
+    _gmap.fitBounds(place.geometry.viewport);
   }
-  if (cls === 'tourism') {
-    if (['attraction','viewpoint','artwork'].indexOf(type) !== -1) return '🏛️';
-    if (['hotel','hostel','guest_house','camp_site'].indexOf(type) !== -1) return '🏨';
-    if (['museum'].indexOf(type) !== -1) return '🖼️';
-    if (['beach'].indexOf(type) !== -1) return '🏖️';
-  }
-  if (cls === 'natural') return '🌿';
-  if (cls === 'shop') return '🛍️';
-  if (cls === 'leisure') return '🌿';
-  return '📍';
 }
 
-function guessCategoryFromNominatim(type, cls, name) {
-  var n = (name || '').toLowerCase();
-  if (cls === 'amenity' && ['restaurant','fast_food','cafe','bar','pub','brasserie'].indexOf(type) !== -1) return 'restaurant';
-  if (cls === 'amenity' && ['museum','theatre'].indexOf(type) !== -1) return 'musee';
-  if (cls === 'tourism' && type === 'museum') return 'musee';
-  if (cls === 'tourism' && ['attraction','viewpoint','artwork','monument'].indexOf(type) !== -1) return 'monument';
-  if (cls === 'natural' || cls === 'leisure' || type === 'beach' || type === 'park') return 'nature';
-  if (cls === 'shop') return 'shopping';
-  if (n.indexOf('musée') !== -1 || n.indexOf('museum') !== -1) return 'musee';
-  if (n.indexOf('restaurant') !== -1 || n.indexOf('café') !== -1 || n.indexOf('bar ') !== -1) return 'restaurant';
-  if (n.indexOf('plage') !== -1 || n.indexOf('parc') !== -1 || n.indexOf('jardin') !== -1) return 'nature';
-  if (n.indexOf('cathédrale') !== -1 || n.indexOf('château') !== -1 || n.indexOf('basilique') !== -1) return 'monument';
-  return null;
+function reverseGeocode(lat, lng) {
+  if (!_googleMapsReady || !window.google) return;
+  var geocoder = new google.maps.Geocoder();
+  geocoder.geocode({ location: { lat: lat, lng: lng }, language: 'fr' }, function(results, status) {
+    if (status === 'OK' && results[0]) {
+      document.getElementById('newLieuAdresse').value = results[0].formatted_address;
+      if (!document.getElementById('newLieuNom').value) {
+        var comp = results[0].address_components;
+        var name = comp && comp[0] ? comp[0].long_name : results[0].formatted_address.split(',')[0];
+        document.getElementById('newLieuNom').value = name;
+      }
+    }
+  });
 }
 
-function computeDistanceFromHeb(lat, lon) {
+function computeDistanceFromHeb(lat, lng) {
   var trip = currentTrip();
-  if (!trip || !trip.infos) return;
-  var hebLat = parseFloat(trip.infos._hebLat);
-  var hebLon = parseFloat(trip.infos._hebLon);
   var statusEl = document.getElementById('distanceCalcStatus');
-  var distEl = document.getElementById('newLieuDistance');
-
-  if (!hebLat || !hebLon) {
-    if (statusEl) statusEl.textContent = '⚠️ Géocodez d\'abord l\'adresse de votre hébergement (section Infos)';
+  var distEl   = document.getElementById('newLieuDistance');
+  if (!trip || !trip.infos || !trip.infos._hebLat) {
+    if (statusEl) statusEl.textContent = '⚠️ Géocodez d\'abord l\'hébergement (renseignez son adresse dans Infos voyage)';
     return;
   }
-  // Haversine formula
-  var R = 6371;
-  var dLat = (lat - hebLat) * Math.PI / 180;
-  var dLon = (lon - hebLon) * Math.PI / 180;
-  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
-          Math.cos(hebLat*Math.PI/180)*Math.cos(lat*Math.PI/180)*
-          Math.sin(dLon/2)*Math.sin(dLon/2);
-  var dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  var txt = dist < 1 ? Math.round(dist * 1000) + ' m' : dist.toFixed(1) + ' km';
-  if (distEl) distEl.value = txt + ' de l\'hébergement (vol d\'oiseau)';
-  if (statusEl) statusEl.textContent = '✅ Distance calculée depuis l\'hébergement';
+  var hebLat = parseFloat(trip.infos._hebLat);
+  var hebLng = parseFloat(trip.infos._hebLon);
+
+  if (_googleMapsReady && window.google && google.maps.geometry) {
+    // Distance à vol d'oiseau via Google geometry
+    var dist = google.maps.geometry.spherical.computeDistanceBetween(
+      new google.maps.LatLng(hebLat, hebLng),
+      new google.maps.LatLng(lat, lng)
+    );
+    var txt = dist < 1000 ? Math.round(dist) + ' m' : (dist / 1000).toFixed(1) + ' km';
+    if (distEl) distEl.value = txt + ' de l\'hébergement';
+    if (statusEl) statusEl.textContent = '✅ Distance calculée (vol d\'oiseau)';
+  } else {
+    // Fallback Haversine
+    var R = 6371000;
+    var dLat = (lat - hebLat) * Math.PI / 180;
+    var dLon = (lng - hebLng) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(hebLat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    var dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    var txt = dist < 1000 ? Math.round(dist) + ' m' : (dist/1000).toFixed(1) + ' km';
+    if (distEl) distEl.value = txt + ' de l\'hébergement';
+    if (statusEl) statusEl.textContent = '✅ Distance calculée';
+  }
 }
 
-// Géocoder l'adresse hébergement et stocker les coords dans infos
 function geocodeHebergement() {
   var trip = currentTrip(); if (!trip) return;
-  var addr = (trip.infos.infoAdresseHebergement || '') + ' ' + (trip.infos.infoNomHebergement || '');
-  addr = addr.trim();
+  if (!_googleMapsReady || !window.google) return;
+  var addr = [trip.infos.infoNomHebergement, trip.infos.infoAdresseHebergement].filter(Boolean).join(', ');
   if (!addr) return;
-  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(addr) + '&limit=1')
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data && data[0]) {
-      trip.infos._hebLat = data[0].lat;
-      trip.infos._hebLon = data[0].lon;
+  var geocoder = new google.maps.Geocoder();
+  geocoder.geocode({ address: addr, language: 'fr' }, function(results, status) {
+    if (status === 'OK' && results[0]) {
+      trip.infos._hebLat = results[0].geometry.location.lat();
+      trip.infos._hebLon = results[0].geometry.location.lng();
       save();
     }
-  })
-  .catch(function() {});
+  });
+}
+
+function locateMe() {
+  if (!navigator.geolocation) { toast('Géolocalisation non supportée', 'error'); return; }
+  toast('📍 Localisation en cours…');
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    placeGMapMarker(lat, lng, 'Ma position');
+    reverseGeocode(lat, lng);
+  }, function() {
+    toast('Impossible de vous localiser', 'error');
+  });
+}
+
+function guessCategoryFromGoogleTypes(types) {
+  var t = types.join(',');
+  if (/restaurant|food|cafe|bar|meal/.test(t))         return 'restaurant';
+  if (/museum|art_gallery/.test(t))                     return 'musee';
+  if (/shopping_mall|store|clothing_store/.test(t))     return 'shopping';
+  if (/park|natural_feature|campground|beach/.test(t))  return 'nature';
+  if (/tourist_attraction|point_of_interest|church|place_of_worship|stadium/.test(t)) return 'monument';
+  return null;
 }
 
 // ── À VISITER ──────────────────────────────────────────────
@@ -1409,7 +1424,7 @@ function renderLieux() {
   var dest = [trip.infos && trip.infos.infoVille, trip.infos && trip.infos.infoPays].filter(Boolean).join(', ');
   document.getElementById('visiterSubtitle').textContent = dest || 'Planifiez vos visites';
 
-  // Géocoder l'hébergement en arrière-plan si pas encore fait
+  // Géocoder hébergement en arrière-plan si pas fait
   if (trip.infos && !trip.infos._hebLat && (trip.infos.infoAdresseHebergement || trip.infos.infoNomHebergement)) {
     geocodeHebergement();
   }
@@ -1422,27 +1437,26 @@ function renderLieux() {
 
   container.innerHTML = lieux.map(function(l) {
     var addrEnc = encodeURIComponent(l.adresse || l.nom);
-    var coordsNav = l.lat && l.lon ? l.lat + ',' + l.lon : null;
-    var gmUrl = coordsNav
+    var gmUrl = l.lat && l.lon
       ? 'https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lon
       : 'https://www.google.com/maps/search/?api=1&query=' + addrEnc;
     return '<div class="lieu-card">' +
       '<div class="lieu-header">' +
-      '<span class="lieu-title">' + (CAT_ICONS[l.cat] || '📌') + ' ' + escHtml(l.nom) + '</span>' +
-      '<span class="lieu-cat-badge">' + (CAT_LABELS[l.cat] || l.cat) + '</span>' +
+        '<span class="lieu-title">' + (CAT_ICONS[l.cat] || '📌') + ' ' + escHtml(l.nom) + '</span>' +
+        '<span class="lieu-cat-badge">' + (CAT_LABELS[l.cat] || l.cat) + '</span>' +
       '</div>' +
       '<div class="lieu-meta">' +
-      (l.adresse ? '<span>📍 ' + escHtml(l.adresse.split(',')[0]) + '</span>' : '') +
-      (l.distance ? '<span>📏 ' + escHtml(l.distance) + '</span>' : '') +
-      (l.lat ? '<span style="font-size:0.72rem;color:var(--text3)">🌐 ' + parseFloat(l.lat).toFixed(4) + ', ' + parseFloat(l.lon).toFixed(4) + '</span>' : '') +
+        (l.adresse  ? '<span>📍 ' + escHtml(l.adresse.split(',')[0]) + '</span>' : '') +
+        (l.distance ? '<span>📏 ' + escHtml(l.distance) + '</span>' : '') +
+        (l.rating   ? '<span>⭐ ' + escHtml(l.rating) + '</span>' : '') +
       '</div>' +
       (l.notes ? '<div class="lieu-notes">💬 ' + escHtml(l.notes) + '</div>' : '') +
       '<div class="lieu-actions">' +
-      '<a class="btn-maps" href="' + gmUrl + '" target="_blank" rel="noopener">🗺️ Google Maps</a>' +
-      '<a class="btn-maps plans" href="https://maps.apple.com/?q=' + addrEnc + '" target="_blank" rel="noopener">🍎 Plans</a>' +
-      '<a class="btn-maps waze" href="https://waze.com/ul?q=' + addrEnc + '" target="_blank" rel="noopener">🚗 Waze</a>' +
-      '<button class="btn-icon btn-edit" onclick="editLieu(\'' + l.id + '\')" title="Modifier">✏️</button>' +
-      '<button class="btn-danger" onclick="deleteLieu(\'' + l.id + '\')">🗑️</button>' +
+        '<a class="btn-maps" href="' + gmUrl + '" target="_blank" rel="noopener">🗺️ Google Maps</a>' +
+        '<a class="btn-maps plans" href="https://maps.apple.com/?q=' + addrEnc + '" target="_blank" rel="noopener">🍎 Plans</a>' +
+        '<a class="btn-maps waze" href="https://waze.com/ul?q=' + addrEnc + '" target="_blank" rel="noopener">🚗 Waze</a>' +
+        '<button class="btn-icon btn-edit" onclick="editLieu(\'' + l.id + '\')" title="Modifier">✏️</button>' +
+        '<button class="btn-danger" onclick="deleteLieu(\'' + l.id + '\')">🗑️</button>' +
       '</div></div>';
   }).join('');
 }
@@ -1462,37 +1476,49 @@ function triParDistance() {
 }
 
 function _openLieuModal(lieu) {
-  // Réinitialiser les champs
-  document.getElementById('newLieuNom').value      = lieu ? lieu.nom     : '';
-  document.getElementById('newLieuAdresse').value  = lieu ? lieu.adresse : '';
-  document.getElementById('newLieuDistance').value = lieu ? lieu.distance: '';
-  document.getElementById('newLieuNotes').value    = lieu ? lieu.notes   : '';
+  document.getElementById('newLieuNom').value      = lieu ? (lieu.nom      || '') : '';
+  document.getElementById('newLieuAdresse').value  = lieu ? (lieu.adresse  || '') : '';
+  document.getElementById('newLieuDistance').value = lieu ? (lieu.distance || '') : '';
+  document.getElementById('newLieuNotes').value    = lieu ? (lieu.notes    || '') : '';
   document.getElementById('newLieuCoords').value   = lieu && lieu.lat ? lieu.lat + ', ' + lieu.lon : '';
+  document.getElementById('newLieuRating').value   = lieu ? (lieu.rating   || '') : '';
   document.getElementById('mapSearchQuery').value  = '';
-  document.getElementById('mapSearchResults').innerHTML = '';
   document.getElementById('distanceCalcStatus').textContent = '';
   if (lieu) {
-    document.getElementById('newLieuCategorie').value = lieu.cat || 'autre';
-    document.getElementById('modalLieuTitle').textContent = '✏️ Modifier le lieu';
-    document.getElementById('btnConfirmLieu').textContent = '💾 Enregistrer';
+    document.getElementById('newLieuCategorie').value  = lieu.cat || 'autre';
+    document.getElementById('modalLieuTitle').textContent   = '✏️ Modifier le lieu';
+    document.getElementById('btnConfirmLieu').textContent   = '💾 Enregistrer';
   } else {
-    document.getElementById('modalLieuTitle').textContent = '📍 Ajouter un lieu';
-    document.getElementById('btnConfirmLieu').textContent = '＋ Ajouter';
+    document.getElementById('modalLieuTitle').textContent   = '📍 Ajouter un lieu';
+    document.getElementById('btnConfirmLieu').textContent   = '＋ Ajouter';
   }
   openModal('modalAddLieu');
-  // Init carte après affichage (délai pour que le DOM soit visible)
+  // Initialiser la carte après que le DOM soit visible
   setTimeout(function() {
-    if (_leafletMap) {
-      _leafletMap.remove();
-      _leafletMap = null;
-      _leafletMarker = null;
+    if (_gmap) {
+      // Réutiliser la carte existante, reset marqueur lieu
+      if (_gmapMarker) { _gmapMarker.setMap(null); _gmapMarker = null; }
+      if (lieu && lieu.lat) {
+        placeGMapMarker(parseFloat(lieu.lat), parseFloat(lieu.lon), lieu.nom);
+      }
+      google.maps.event.trigger(_gmap, 'resize');
+      // Recentrer
+      var trip = currentTrip();
+      if (lieu && lieu.lat) {
+        _gmap.setCenter({ lat: parseFloat(lieu.lat), lng: parseFloat(lieu.lon) });
+      } else if (trip && trip.infos && trip.infos._hebLat) {
+        _gmap.setCenter({ lat: parseFloat(trip.infos._hebLat), lng: parseFloat(trip.infos._hebLon) });
+      }
+      return;
     }
-    initLeafletMap();
-    // Si lieu existant avec coords, placer le marqueur
-    if (lieu && lieu.lat && lieu.lon) {
-      placeMarker(parseFloat(lieu.lat), parseFloat(lieu.lon), lieu.nom);
+    if (_googleMapsReady) {
+      _gmap = null; _gmapMarker = null; _gmapHebMarker = null; _gmapAutocomplete = null;
+      initGoogleMap();
+      if (lieu && lieu.lat) {
+        setTimeout(function() { placeGMapMarker(parseFloat(lieu.lat), parseFloat(lieu.lon), lieu.nom); }, 300);
+      }
     }
-  }, 120);
+  }, 150);
 }
 
 function showAddLieu() {
@@ -1502,7 +1528,10 @@ function showAddLieu() {
 
 function editLieu(id) {
   var trip = currentTrip(); if (!trip) return;
-  var lieu = (trip.lieux || []).find(function(l) { return l.id === id; });
+  var lieu = null;
+  for (var i = 0; i < (trip.lieux || []).length; i++) {
+    if (trip.lieux[i].id === id) { lieu = trip.lieux[i]; break; }
+  }
   if (!lieu) return;
   _editingLieuId = id;
   _openLieuModal(lieu);
@@ -1518,20 +1547,21 @@ function confirmAddLieu() {
   var lon = coords[1] ? coords[1].trim() : '';
 
   if (_editingLieuId) {
-    // Modification
-    var lieu = (trip.lieux || []).find(function(l) { return l.id === _editingLieuId; });
-    if (lieu) {
-      lieu.nom      = nom;
-      lieu.cat      = document.getElementById('newLieuCategorie').value;
-      lieu.adresse  = document.getElementById('newLieuAdresse').value.trim();
-      lieu.distance = document.getElementById('newLieuDistance').value.trim();
-      lieu.notes    = document.getElementById('newLieuNotes').value.trim();
-      lieu.lat      = lat;
-      lieu.lon      = lon;
+    for (var i = 0; i < (trip.lieux || []).length; i++) {
+      if (trip.lieux[i].id === _editingLieuId) {
+        trip.lieux[i].nom      = nom;
+        trip.lieux[i].cat      = document.getElementById('newLieuCategorie').value;
+        trip.lieux[i].adresse  = document.getElementById('newLieuAdresse').value.trim();
+        trip.lieux[i].distance = document.getElementById('newLieuDistance').value.trim();
+        trip.lieux[i].notes    = document.getElementById('newLieuNotes').value.trim();
+        trip.lieux[i].rating   = document.getElementById('newLieuRating').value.trim();
+        trip.lieux[i].lat      = lat;
+        trip.lieux[i].lon      = lon;
+        break;
+      }
     }
     toast('✏️ Lieu modifié', 'success');
   } else {
-    // Ajout
     if (!trip.lieux) trip.lieux = [];
     trip.lieux.push({
       id: genId(), nom: nom,
@@ -1539,14 +1569,13 @@ function confirmAddLieu() {
       adresse:  document.getElementById('newLieuAdresse').value.trim(),
       distance: document.getElementById('newLieuDistance').value.trim(),
       notes:    document.getElementById('newLieuNotes').value.trim(),
+      rating:   document.getElementById('newLieuRating').value.trim(),
       lat: lat, lon: lon,
     });
     toast('📍 Lieu ajouté', 'success');
   }
   _editingLieuId = null;
-  save();
-  closeModal('modalAddLieu');
-  renderLieux();
+  save(); closeModal('modalAddLieu'); renderLieux();
 }
 
 function deleteLieu(id) {

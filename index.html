@@ -14,9 +14,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/app.css"/>
-  <!-- Leaflet.js (carte OpenStreetMap) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Google Maps API -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCjzeTlbJRQIz9VQyh6FmwEqD_89TPjmqc&libraries=places,geometry&language=fr&callback=onGoogleMapsReady" async defer></script>
 </head>
 <body>
   <div id="app">
@@ -532,7 +531,6 @@
 
         <div id="lieuxContainer"></div>
 
-        <!-- Modal Ajouter lieu -->
         <!-- Modal Ajouter / Modifier lieu -->
         <div class="modal" id="modalAddLieu">
           <div class="modal-content modal-map">
@@ -541,16 +539,15 @@
               <button class="modal-close" onclick="closeModal('modalAddLieu')">✕</button>
             </div>
 
-            <!-- Recherche sur la carte -->
+            <!-- Autocomplete Google Places -->
             <div class="map-search-row">
-              <input type="text" id="mapSearchQuery" placeholder="Rechercher un lieu, une adresse…" onkeypress="if(event.key==='Enter') searchOnMap()"/>
-              <button class="btn-maps-search" onclick="searchOnMap()">🔍</button>
+              <input type="text" id="mapSearchQuery" placeholder="Rechercher un lieu, restaurant, adresse…" autocomplete="off"/>
+              <button class="btn-maps-search" id="btnLocateMe" onclick="locateMe()" title="Ma position">📍</button>
             </div>
-            <div id="mapSearchResults" class="map-search-results"></div>
+            <p class="map-hint">💡 Tapez un nom ou une adresse — sélectionnez dans la liste Google pour remplir automatiquement tous les champs.</p>
 
-            <!-- Carte Leaflet -->
-            <div id="leafletMap" style="height:260px;border-radius:8px;overflow:hidden;margin-bottom:14px;border:1.5px solid var(--border);"></div>
-            <p class="map-hint">💡 Cliquez sur un résultat de recherche pour le placer sur la carte — les champs se remplissent automatiquement.</p>
+            <!-- Carte Google Maps -->
+            <div id="googleMap" style="height:280px;border-radius:8px;overflow:hidden;margin-bottom:14px;border:1.5px solid var(--border);"></div>
 
             <!-- Champs lieu -->
             <div class="form-grid">
@@ -571,16 +568,20 @@
               </div>
               <div class="form-group full-width">
                 <label>Adresse</label>
-                <input type="text" id="newLieuAdresse" placeholder="Rempli automatiquement ou saisie manuelle"/>
+                <input type="text" id="newLieuAdresse" placeholder="Rempli automatiquement via Google"/>
               </div>
               <div class="form-group">
                 <label>Distance depuis l'hébergement</label>
-                <input type="text" id="newLieuDistance" placeholder="Calculée auto si hébergement renseigné" readonly id="newLieuDistance"/>
+                <input type="text" id="newLieuDistance" placeholder="Calculée automatiquement" readonly/>
                 <span id="distanceCalcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:4px;display:block;"></span>
               </div>
               <div class="form-group">
                 <label>Coordonnées GPS</label>
-                <input type="text" id="newLieuCoords" placeholder="lat, lon — rempli auto" readonly/>
+                <input type="text" id="newLieuCoords" placeholder="Rempli automatiquement" readonly/>
+              </div>
+              <div class="form-group">
+                <label>Note Google</label>
+                <input type="text" id="newLieuRating" placeholder="—" readonly/>
               </div>
               <div class="form-group full-width">
                 <label>Notes / Infos pratiques</label>
