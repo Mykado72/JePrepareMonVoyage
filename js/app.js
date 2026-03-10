@@ -1955,7 +1955,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── PARAMÈTRES ─────────────────────────────────────────────
-var APP_VERSION = 'v1.1.0';
+var APP_VERSION = 'v0.0.5';
 
 function renderParametres() {
   // Mettre à jour les affichages de version
