@@ -1684,10 +1684,15 @@ var _hebActiveIW = null;
 function showNearbyHebMarkers(latLng) {
   if (!_hebMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_hebMap);
-  var types = _hebGoogleTypes();
+
+  // Keyword selon le type d'hébergement sélectionné
+  var sel = document.getElementById('infoTypeHebergement');
+  var val = sel ? sel.value : '';
+  var keyword = val === 'camping' ? 'camping' : 'hôtel lodging hébergement';
+
   service.nearbySearch({
     location: latLng, radius: 800,
-    type: types[0], language: 'fr'
+    keyword: keyword, language: 'fr'
   }, function(results, status) {
     // Effacer anciens marqueurs
     _hebSearchMarkers.forEach(function(m) { m.setMap(null); });
@@ -1697,7 +1702,7 @@ function showNearbyHebMarkers(latLng) {
 
     results.slice(0, 15).forEach(function(place, idx) {
       var pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-      var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + pos.lat + ',' + pos.lng + '&query_place_id=' + place.place_id;
+      var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(place.name);
       var marker = new google.maps.Marker({
         map: _hebMap, position: pos,
         title: place.name,
@@ -1928,7 +1933,7 @@ function _showVisiterSearchMarkers(latLng, directPlace) {
 function _placeVisiterSearchMarker(place, idx) {
   if (!place.geometry) return;
   var pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + pos.lat + ',' + pos.lng + '&query_place_id=' + place.place_id;
+  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(place.name);
   var marker = new google.maps.Marker({
     map: _visiterMap, position: pos,
     title: place.name,
@@ -2182,10 +2187,10 @@ function renderLieux() {
   }
 
   container.innerHTML = lieux.map(function(l) {
+    var nomEnc  = encodeURIComponent(l.nom);
     var addrEnc = encodeURIComponent(l.adresse || l.nom);
-    var gmUrl = l.lat && l.lon
-      ? 'https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lon
-      : 'https://www.google.com/maps/search/?api=1&query=' + addrEnc;
+    var gmUrl   = 'https://www.google.com/maps/search/?api=1&query=' + nomEnc
+      + (l.adresse ? '+' + encodeURIComponent(l.adresse.split(',').slice(-2).join(',').trim()) : '');
     return '<div class="lieu-card">' +
       '<div class="lieu-header">' +
         '<span class="lieu-title">' + (CAT_ICONS[l.cat] || '📌') + ' ' + escHtml(l.nom) + '</span>' +
