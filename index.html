@@ -14,6 +14,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/app.css"/>
+  <!-- Leaflet.js (carte OpenStreetMap) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -530,12 +533,26 @@
         <div id="lieuxContainer"></div>
 
         <!-- Modal Ajouter lieu -->
+        <!-- Modal Ajouter / Modifier lieu -->
         <div class="modal" id="modalAddLieu">
-          <div class="modal-content">
+          <div class="modal-content modal-map">
             <div class="modal-header">
-              <h3>📍 Ajouter un lieu</h3>
+              <h3 id="modalLieuTitle">📍 Ajouter un lieu</h3>
               <button class="modal-close" onclick="closeModal('modalAddLieu')">✕</button>
             </div>
+
+            <!-- Recherche sur la carte -->
+            <div class="map-search-row">
+              <input type="text" id="mapSearchQuery" placeholder="Rechercher un lieu, une adresse…" onkeypress="if(event.key==='Enter') searchOnMap()"/>
+              <button class="btn-maps-search" onclick="searchOnMap()">🔍</button>
+            </div>
+            <div id="mapSearchResults" class="map-search-results"></div>
+
+            <!-- Carte Leaflet -->
+            <div id="leafletMap" style="height:260px;border-radius:8px;overflow:hidden;margin-bottom:14px;border:1.5px solid var(--border);"></div>
+            <p class="map-hint">💡 Cliquez sur un résultat de recherche pour le placer sur la carte — les champs se remplissent automatiquement.</p>
+
+            <!-- Champs lieu -->
             <div class="form-grid">
               <div class="form-group">
                 <label>Nom du lieu *</label>
@@ -552,13 +569,18 @@
                   <option value="autre">📌 Autre</option>
                 </select>
               </div>
-              <div class="form-group">
+              <div class="form-group full-width">
                 <label>Adresse</label>
-                <input type="text" id="newLieuAdresse" placeholder="Adresse complète"/>
+                <input type="text" id="newLieuAdresse" placeholder="Rempli automatiquement ou saisie manuelle"/>
               </div>
               <div class="form-group">
-                <label>Distance estimée depuis l'hébergement</label>
-                <input type="text" id="newLieuDistance" placeholder="ex: 2.5 km, 30 min"/>
+                <label>Distance depuis l'hébergement</label>
+                <input type="text" id="newLieuDistance" placeholder="Calculée auto si hébergement renseigné" readonly id="newLieuDistance"/>
+                <span id="distanceCalcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:4px;display:block;"></span>
+              </div>
+              <div class="form-group">
+                <label>Coordonnées GPS</label>
+                <input type="text" id="newLieuCoords" placeholder="lat, lon — rempli auto" readonly/>
               </div>
               <div class="form-group full-width">
                 <label>Notes / Infos pratiques</label>
@@ -567,7 +589,7 @@
             </div>
             <div class="modal-actions">
               <button class="btn-secondary" onclick="closeModal('modalAddLieu')">Annuler</button>
-              <button class="btn-primary" onclick="confirmAddLieu()">Ajouter</button>
+              <button class="btn-primary" id="btnConfirmLieu" onclick="confirmAddLieu()">＋ Ajouter</button>
             </div>
           </div>
         </div>

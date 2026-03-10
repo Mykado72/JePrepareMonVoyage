@@ -522,3 +522,68 @@ textarea { resize: vertical; min-height: 70px; }
 .maps-quick-btn--hotel:hover {
   background: rgba(33,150,243,0.15);
 }
+
+/* ── MODAL CARTE ─────────────────────────────────────── */
+.modal-map { max-width: 680px; width: 96vw; }
+.map-search-row {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.map-search-row input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+.map-search-row input:focus { outline: none; border-color: var(--primary); }
+.map-search-results {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: none;
+}
+.map-search-results:not(:empty) { display: block; }
+.map-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.map-result-item:hover, .map-result-item.selected {
+  background: rgba(33,150,243,0.1);
+}
+.map-result-item.selected { border-left: 3px solid var(--primary); }
+.map-result-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 2px; }
+.map-result-name { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+.map-result-addr { font-size: 0.75rem; color: var(--text3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
+.map-result-loading, .map-result-empty {
+  padding: 12px 16px;
+  color: var(--text3);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+.map-hint {
+  font-size: 0.78rem;
+  color: var(--text3);
+  margin: -8px 0 12px;
+  font-style: italic;
+}
+/* Champ distance readonly */
+#newLieuDistance { background: var(--surface); color: var(--text2); cursor: default; }
+
+/* Bouton modifier lieu */
+.btn-icon { background: none; border: 1.5px solid var(--border); border-radius: 6px; padding: 5px 8px; cursor: pointer; font-size: 0.85rem; transition: all 0.15s; }
+.btn-edit:hover { border-color: var(--primary); background: rgba(33,150,243,0.1); }
+
+/* Leaflet fix z-index dans modal */
+.modal .leaflet-pane, .modal .leaflet-control { z-index: 1 !important; }
+.modal .leaflet-top, .modal .leaflet-bottom { z-index: 10 !important; }
