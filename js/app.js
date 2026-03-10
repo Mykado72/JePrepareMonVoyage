@@ -1,4 +1,4 @@
-/* ===========================================================
+/* ============================================================
    JE PRÉPARE MON VOYAGE – app.js  (v2)
    ============================================================ */
 
@@ -1191,6 +1191,213 @@ var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', nature:'🌿', muse
 var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', nature:'Nature', musee:'Musée', shopping:'Shopping', autre:'Autre' };
 var currentLieuFilter = 'tous';
 
+// ── LEAFLET MAP & NOMINATIM ────────────────────────────────
+var _leafletMap = null;
+var _leafletMarker = null;
+var _editingLieuId = null; // null = ajout, string = édition
+
+function initLeafletMap() {
+  if (_leafletMap) {
+    _leafletMap.invalidateSize();
+    return;
+  }
+  if (typeof L === 'undefined') return;
+
+  var trip = currentTrip();
+  var centerLat = 48.8566, centerLon = 2.3522, zoom = 5; // Paris par défaut
+  if (trip && trip.infos) {
+    // Si l'hébergement a des coords, centrer dessus
+    if (trip.infos._hebLat && trip.infos._hebLon) {
+      centerLat = parseFloat(trip.infos._hebLat);
+      centerLon = parseFloat(trip.infos._hebLon);
+      zoom = 13;
+    }
+  }
+
+  _leafletMap = L.map('leafletMap', { zoomControl: true }).setView([centerLat, centerLon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19
+  }).addTo(_leafletMap);
+
+  // Clic sur la carte → placer un marqueur + géocoder l'adresse
+  _leafletMap.on('click', function(e) {
+    placeMarkerAndReverseGeocode(e.latlng.lat, e.latlng.lng);
+  });
+}
+
+function placeMarker(lat, lon, label) {
+  if (!_leafletMap) return;
+  if (_leafletMarker) _leafletMap.removeLayer(_leafletMarker);
+  _leafletMarker = L.marker([lat, lon]).addTo(_leafletMap);
+  if (label) _leafletMarker.bindPopup(label).openPopup();
+  _leafletMap.setView([lat, lon], 15);
+  // Remplir coords
+  document.getElementById('newLieuCoords').value = lat.toFixed(6) + ', ' + lon.toFixed(6);
+  // Calculer distance hébergement
+  computeDistanceFromHeb(lat, lon);
+}
+
+function placeMarkerAndReverseGeocode(lat, lon) {
+  placeMarker(lat, lon, null);
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&accept-language=fr', {
+    headers: { 'Accept-Language': 'fr' }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data && data.display_name) {
+      document.getElementById('newLieuAdresse').value = data.display_name;
+      if (!document.getElementById('newLieuNom').value && data.name) {
+        document.getElementById('newLieuNom').value = data.name || '';
+      }
+    }
+  })
+  .catch(function() {});
+}
+
+function searchOnMap() {
+  var q = document.getElementById('mapSearchQuery').value.trim();
+  if (!q) return;
+  var dest = getMapsDestination();
+  var full = dest ? q + ' ' + dest : q;
+  var resultsEl = document.getElementById('mapSearchResults');
+  resultsEl.innerHTML = '<div class="map-result-loading">🔍 Recherche en cours…</div>';
+
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(full) + '&limit=6&accept-language=fr&addressdetails=1')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data || !data.length) {
+      resultsEl.innerHTML = '<div class="map-result-empty">Aucun résultat. Essayez avec le nom de ville.</div>';
+      return;
+    }
+    resultsEl.innerHTML = data.map(function(item, idx) {
+      return '<div class="map-result-item" onclick="selectMapResult(' + idx + ')" data-idx="' + idx + '">' +
+        '<span class="map-result-icon">' + getNominatimIcon(item.type, item.class) + '</span>' +
+        '<div class="map-result-info">' +
+        '<div class="map-result-name">' + escHtml(item.display_name.split(',')[0]) + '</div>' +
+        '<div class="map-result-addr">' + escHtml(item.display_name) + '</div>' +
+        '</div></div>';
+    }).join('');
+    // Stocker les résultats dans un attribut data
+    resultsEl._results = data;
+    // Si un seul résultat, le sélectionner directement
+    if (data.length === 1) selectMapResult(0);
+  })
+  .catch(function() {
+    resultsEl.innerHTML = '<div class="map-result-empty">⚠️ Erreur de connexion. Vérifiez votre réseau.</div>';
+  });
+}
+
+function selectMapResult(idx) {
+  var resultsEl = document.getElementById('mapSearchResults');
+  var data = resultsEl._results;
+  if (!data || !data[idx]) return;
+  var item = data[idx];
+  var lat = parseFloat(item.lat);
+  var lon = parseFloat(item.lon);
+
+  // Highlight sélectionné
+  resultsEl.querySelectorAll('.map-result-item').forEach(function(el) { el.classList.remove('selected'); });
+  var sel = resultsEl.querySelector('[data-idx="' + idx + '"]');
+  if (sel) sel.classList.add('selected');
+
+  // Placer le marqueur
+  placeMarker(lat, lon, item.display_name.split(',')[0]);
+
+  // Remplir les champs
+  document.getElementById('newLieuAdresse').value = item.display_name;
+  var nomField = document.getElementById('newLieuNom');
+  if (!nomField.value) {
+    nomField.value = item.display_name.split(',')[0];
+  }
+  // Auto-détecter catégorie
+  var cat = guessCategoryFromNominatim(item.type, item.class, item.display_name);
+  if (cat) document.getElementById('newLieuCategorie').value = cat;
+}
+
+function getNominatimIcon(type, cls) {
+  if (cls === 'amenity') {
+    if (['restaurant','fast_food','cafe','bar','pub'].indexOf(type) !== -1) return '🍽️';
+    if (['museum','theatre','cinema'].indexOf(type) !== -1) return '🖼️';
+    if (['hospital','pharmacy','clinic'].indexOf(type) !== -1) return '💊';
+    if (['hotel','hostel','guest_house'].indexOf(type) !== -1) return '🏨';
+    if (['supermarket','marketplace'].indexOf(type) !== -1) return '🛒';
+  }
+  if (cls === 'tourism') {
+    if (['attraction','viewpoint','artwork'].indexOf(type) !== -1) return '🏛️';
+    if (['hotel','hostel','guest_house','camp_site'].indexOf(type) !== -1) return '🏨';
+    if (['museum'].indexOf(type) !== -1) return '🖼️';
+    if (['beach'].indexOf(type) !== -1) return '🏖️';
+  }
+  if (cls === 'natural') return '🌿';
+  if (cls === 'shop') return '🛍️';
+  if (cls === 'leisure') return '🌿';
+  return '📍';
+}
+
+function guessCategoryFromNominatim(type, cls, name) {
+  var n = (name || '').toLowerCase();
+  if (cls === 'amenity' && ['restaurant','fast_food','cafe','bar','pub','brasserie'].indexOf(type) !== -1) return 'restaurant';
+  if (cls === 'amenity' && ['museum','theatre'].indexOf(type) !== -1) return 'musee';
+  if (cls === 'tourism' && type === 'museum') return 'musee';
+  if (cls === 'tourism' && ['attraction','viewpoint','artwork','monument'].indexOf(type) !== -1) return 'monument';
+  if (cls === 'natural' || cls === 'leisure' || type === 'beach' || type === 'park') return 'nature';
+  if (cls === 'shop') return 'shopping';
+  if (n.indexOf('musée') !== -1 || n.indexOf('museum') !== -1) return 'musee';
+  if (n.indexOf('restaurant') !== -1 || n.indexOf('café') !== -1 || n.indexOf('bar ') !== -1) return 'restaurant';
+  if (n.indexOf('plage') !== -1 || n.indexOf('parc') !== -1 || n.indexOf('jardin') !== -1) return 'nature';
+  if (n.indexOf('cathédrale') !== -1 || n.indexOf('château') !== -1 || n.indexOf('basilique') !== -1) return 'monument';
+  return null;
+}
+
+function computeDistanceFromHeb(lat, lon) {
+  var trip = currentTrip();
+  if (!trip || !trip.infos) return;
+  var hebLat = parseFloat(trip.infos._hebLat);
+  var hebLon = parseFloat(trip.infos._hebLon);
+  var statusEl = document.getElementById('distanceCalcStatus');
+  var distEl = document.getElementById('newLieuDistance');
+
+  if (!hebLat || !hebLon) {
+    if (statusEl) statusEl.textContent = '⚠️ Géocodez d\'abord l\'adresse de votre hébergement (section Infos)';
+    return;
+  }
+  // Haversine formula
+  var R = 6371;
+  var dLat = (lat - hebLat) * Math.PI / 180;
+  var dLon = (lon - hebLon) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+          Math.cos(hebLat*Math.PI/180)*Math.cos(lat*Math.PI/180)*
+          Math.sin(dLon/2)*Math.sin(dLon/2);
+  var dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  var txt = dist < 1 ? Math.round(dist * 1000) + ' m' : dist.toFixed(1) + ' km';
+  if (distEl) distEl.value = txt + ' de l\'hébergement (vol d\'oiseau)';
+  if (statusEl) statusEl.textContent = '✅ Distance calculée depuis l\'hébergement';
+}
+
+// Géocoder l'adresse hébergement et stocker les coords dans infos
+function geocodeHebergement() {
+  var trip = currentTrip(); if (!trip) return;
+  var addr = (trip.infos.infoAdresseHebergement || '') + ' ' + (trip.infos.infoNomHebergement || '');
+  addr = addr.trim();
+  if (!addr) return;
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(addr) + '&limit=1')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data && data[0]) {
+      trip.infos._hebLat = data[0].lat;
+      trip.infos._hebLon = data[0].lon;
+      save();
+    }
+  })
+  .catch(function() {});
+}
+
+// ── À VISITER ──────────────────────────────────────────────
+var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', nature:'🌿', musee:'🖼️', shopping:'🛍️', autre:'📌' };
+var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', nature:'Nature', musee:'Musée', shopping:'Shopping', autre:'Autre' };
+var currentLieuFilter = 'tous';
+
 function renderLieux() {
   var trip = currentTrip();
   var container = document.getElementById('lieuxContainer');
@@ -1202,6 +1409,11 @@ function renderLieux() {
   var dest = [trip.infos && trip.infos.infoVille, trip.infos && trip.infos.infoPays].filter(Boolean).join(', ');
   document.getElementById('visiterSubtitle').textContent = dest || 'Planifiez vos visites';
 
+  // Géocoder l'hébergement en arrière-plan si pas encore fait
+  if (trip.infos && !trip.infos._hebLat && (trip.infos.infoAdresseHebergement || trip.infos.infoNomHebergement)) {
+    geocodeHebergement();
+  }
+
   var lieux = (trip.lieux || []).filter(function(l) { return currentLieuFilter === 'tous' || l.cat === currentLieuFilter; });
   if (!lieux.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun lieu' + (currentLieuFilter !== 'tous' ? ' dans cette catégorie' : '') + '</h2><p>Cliquez sur "+ Ajouter un lieu" pour commencer</p></div>';
@@ -1209,21 +1421,27 @@ function renderLieux() {
   }
 
   container.innerHTML = lieux.map(function(l) {
-    var addr = encodeURIComponent(l.adresse || l.nom);
+    var addrEnc = encodeURIComponent(l.adresse || l.nom);
+    var coordsNav = l.lat && l.lon ? l.lat + ',' + l.lon : null;
+    var gmUrl = coordsNav
+      ? 'https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lon
+      : 'https://www.google.com/maps/search/?api=1&query=' + addrEnc;
     return '<div class="lieu-card">' +
       '<div class="lieu-header">' +
       '<span class="lieu-title">' + (CAT_ICONS[l.cat] || '📌') + ' ' + escHtml(l.nom) + '</span>' +
       '<span class="lieu-cat-badge">' + (CAT_LABELS[l.cat] || l.cat) + '</span>' +
       '</div>' +
       '<div class="lieu-meta">' +
-      (l.adresse ? '<span>📍 ' + escHtml(l.adresse) + '</span>' : '') +
+      (l.adresse ? '<span>📍 ' + escHtml(l.adresse.split(',')[0]) + '</span>' : '') +
       (l.distance ? '<span>📏 ' + escHtml(l.distance) + '</span>' : '') +
+      (l.lat ? '<span style="font-size:0.72rem;color:var(--text3)">🌐 ' + parseFloat(l.lat).toFixed(4) + ', ' + parseFloat(l.lon).toFixed(4) + '</span>' : '') +
       '</div>' +
       (l.notes ? '<div class="lieu-notes">💬 ' + escHtml(l.notes) + '</div>' : '') +
       '<div class="lieu-actions">' +
-      '<a class="btn-maps" href="https://www.google.com/maps/search/?api=1&query=' + addr + '" target="_blank" rel="noopener">🗺️ Google Maps</a>' +
-      '<a class="btn-maps plans" href="https://maps.apple.com/?q=' + addr + '" target="_blank" rel="noopener">🍎 Plans</a>' +
-      '<a class="btn-maps waze" href="https://waze.com/ul?q=' + addr + '" target="_blank" rel="noopener">🚗 Waze</a>' +
+      '<a class="btn-maps" href="' + gmUrl + '" target="_blank" rel="noopener">🗺️ Google Maps</a>' +
+      '<a class="btn-maps plans" href="https://maps.apple.com/?q=' + addrEnc + '" target="_blank" rel="noopener">🍎 Plans</a>' +
+      '<a class="btn-maps waze" href="https://waze.com/ul?q=' + addrEnc + '" target="_blank" rel="noopener">🚗 Waze</a>' +
+      '<button class="btn-icon btn-edit" onclick="editLieu(\'' + l.id + '\')" title="Modifier">✏️</button>' +
       '<button class="btn-danger" onclick="deleteLieu(\'' + l.id + '\')">🗑️</button>' +
       '</div></div>';
   }).join('');
@@ -1243,32 +1461,97 @@ function triParDistance() {
   toast('📏 Triés par distance');
 }
 
-function showAddLieu() {
-  ['newLieuNom','newLieuAdresse','newLieuDistance','newLieuNotes'].forEach(function(id) {
-    var el = document.getElementById(id); if (el) el.value = '';
-  });
+function _openLieuModal(lieu) {
+  // Réinitialiser les champs
+  document.getElementById('newLieuNom').value      = lieu ? lieu.nom     : '';
+  document.getElementById('newLieuAdresse').value  = lieu ? lieu.adresse : '';
+  document.getElementById('newLieuDistance').value = lieu ? lieu.distance: '';
+  document.getElementById('newLieuNotes').value    = lieu ? lieu.notes   : '';
+  document.getElementById('newLieuCoords').value   = lieu && lieu.lat ? lieu.lat + ', ' + lieu.lon : '';
+  document.getElementById('mapSearchQuery').value  = '';
+  document.getElementById('mapSearchResults').innerHTML = '';
+  document.getElementById('distanceCalcStatus').textContent = '';
+  if (lieu) {
+    document.getElementById('newLieuCategorie').value = lieu.cat || 'autre';
+    document.getElementById('modalLieuTitle').textContent = '✏️ Modifier le lieu';
+    document.getElementById('btnConfirmLieu').textContent = '💾 Enregistrer';
+  } else {
+    document.getElementById('modalLieuTitle').textContent = '📍 Ajouter un lieu';
+    document.getElementById('btnConfirmLieu').textContent = '＋ Ajouter';
+  }
   openModal('modalAddLieu');
-  setTimeout(function() { document.getElementById('newLieuNom').focus(); }, 100);
+  // Init carte après affichage (délai pour que le DOM soit visible)
+  setTimeout(function() {
+    if (_leafletMap) {
+      _leafletMap.remove();
+      _leafletMap = null;
+      _leafletMarker = null;
+    }
+    initLeafletMap();
+    // Si lieu existant avec coords, placer le marqueur
+    if (lieu && lieu.lat && lieu.lon) {
+      placeMarker(parseFloat(lieu.lat), parseFloat(lieu.lon), lieu.nom);
+    }
+  }, 120);
+}
+
+function showAddLieu() {
+  _editingLieuId = null;
+  _openLieuModal(null);
+}
+
+function editLieu(id) {
+  var trip = currentTrip(); if (!trip) return;
+  var lieu = (trip.lieux || []).find(function(l) { return l.id === id; });
+  if (!lieu) return;
+  _editingLieuId = id;
+  _openLieuModal(lieu);
 }
 
 function confirmAddLieu() {
   var trip = currentTrip(); if (!trip) return;
   var nom = document.getElementById('newLieuNom').value.trim();
   if (!nom) { toast('Entrez un nom de lieu', 'error'); return; }
-  if (!trip.lieux) trip.lieux = [];
-  trip.lieux.push({
-    id: genId(), nom: nom,
-    cat: document.getElementById('newLieuCategorie').value,
-    adresse: document.getElementById('newLieuAdresse').value.trim(),
-    distance: document.getElementById('newLieuDistance').value.trim(),
-    notes: document.getElementById('newLieuNotes').value.trim(),
-  });
-  save(); closeModal('modalAddLieu'); renderLieux();
-  toast('📍 Lieu ajouté', 'success');
+
+  var coords = document.getElementById('newLieuCoords').value.split(',');
+  var lat = coords[0] ? coords[0].trim() : '';
+  var lon = coords[1] ? coords[1].trim() : '';
+
+  if (_editingLieuId) {
+    // Modification
+    var lieu = (trip.lieux || []).find(function(l) { return l.id === _editingLieuId; });
+    if (lieu) {
+      lieu.nom      = nom;
+      lieu.cat      = document.getElementById('newLieuCategorie').value;
+      lieu.adresse  = document.getElementById('newLieuAdresse').value.trim();
+      lieu.distance = document.getElementById('newLieuDistance').value.trim();
+      lieu.notes    = document.getElementById('newLieuNotes').value.trim();
+      lieu.lat      = lat;
+      lieu.lon      = lon;
+    }
+    toast('✏️ Lieu modifié', 'success');
+  } else {
+    // Ajout
+    if (!trip.lieux) trip.lieux = [];
+    trip.lieux.push({
+      id: genId(), nom: nom,
+      cat:      document.getElementById('newLieuCategorie').value,
+      adresse:  document.getElementById('newLieuAdresse').value.trim(),
+      distance: document.getElementById('newLieuDistance').value.trim(),
+      notes:    document.getElementById('newLieuNotes').value.trim(),
+      lat: lat, lon: lon,
+    });
+    toast('📍 Lieu ajouté', 'success');
+  }
+  _editingLieuId = null;
+  save();
+  closeModal('modalAddLieu');
+  renderLieux();
 }
 
 function deleteLieu(id) {
   var trip = currentTrip(); if (!trip) return;
+  if (!confirm('Supprimer ce lieu ?')) return;
   trip.lieux = trip.lieux.filter(function(l) { return l.id !== id; });
   save(); renderLieux();
 }
