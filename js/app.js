@@ -173,24 +173,12 @@ function renderTripSelector() {
   }
 }
 
-function resetAllData() {
-  if (!confirm('⚠️ Supprimer TOUTES les données et repartir de zéro ?\n\nCette action est irréversible.')) return;
-  localStorage.removeItem('jpmv_state');
-  state.trips = [];
-  state.currentTripId = null;
-  state.currentPage = 'infos';
-  renderTripSelector();
-  renderTripList();
-  loadCurrentTrip();
-  navigate('infos');
-  toast('🗑️ Données réinitialisées', 'success');
-}
-
 // ── NAVIGATION ─────────────────────────────────────────────
 var PAGE_TITLES = {
   infos: '🗺️ Infos voyage', checklist: '✅ Checklist',
   bagages: '🧳 Bagages', documents: '📄 Documents',
-  visiter: '📍 À visiter', budget: '💶 Budget'
+  visiter: '📍 À visiter', budget: '💶 Budget',
+  parametres: '⚙️ Paramètres'
 };
 
 function navigate(page) {
@@ -221,6 +209,7 @@ function navigate(page) {
     }, 100);
   }
   else if (page === 'budget') renderBudget();
+  else if (page === 'parametres') renderParametres();
   else if (page === 'infos') {
     // Détruire l'instance pour forcer réinit propre (le div est caché/réaffiché)
     _hebMap = null; _hebMarker = null; _hebAutocomplete = null; _hebInfoWindow = null;
@@ -506,7 +495,23 @@ var VILLES_PAR_PAYS = {
     'Bordeaux','Lille','Rennes','Reims','Saint-Étienne','Toulon','Grenoble','Dijon','Angers',
     'Nîmes','Aix-en-Provence','Clermont-Ferrand','Brest','Tours','Amiens','Metz','Perpignan',
     'Caen','Rouen','Nancy','Avignon','Orléans','Mulhouse','Cannes','Antibes','La Rochelle',
-    'Biarritz','Bayonne','Pau','Annecy','Chambéry','Ajaccio','Bastia','Metz','Colmar'],
+    'Biarritz','Bayonne','Pau','Annecy','Chambéry','Ajaccio','Bastia','Colmar','Troyes',
+    'Limoges','Poitiers','Saint-Malo','Quimper','Lorient','Saint-Nazaire','Le Mans','Laval',
+    'Cherbourg','Caen','Évreux','Chartres','Beauvais','Compiègne','Soissons','Valenciennes',
+    'Dunkerque','Calais','Arras','Lens','Douai','Roubaix','Tourcoing','Béthune','Maubeuge',
+    'Thionville','Forbach','Sarreguemines','Haguenau','Colmar','Sélestat','Saverne',
+    'Belfort','Montbéliard','Besançon','Lons-le-Saunier','Bourg-en-Bresse','Mâcon',
+    'Chalon-sur-Saône','Auxerre','Sens','Nevers','Bourges','Châteauroux','Blois','Vendôme',
+    'Le Havre','Évreux','Alençon','Flers','Vire','Saint-Brieuc','Vannes','Morlaix',
+    'Périgueux','Bergerac','Agen','Auch','Montauban','Albi','Castres','Carcassonne','Narbonne',
+    'Béziers','Sète','Montpellier','Nîmes','Arles','Aix-en-Provence','Toulon','Fréjus',
+    'Saint-Tropez','Menton','Monaco','Antibes','Grasse','Draguignan','Brignoles',
+    'Gap','Briançon','Sisteron','Digne-les-Bains','Barcelonnette','Embrun',
+    'Valence','Romans-sur-Isère','Vienne','Bourgoin-Jallieu','Voiron',
+    'Thonon-les-Bains','Évian-les-Bains','Albertville','Moûtiers','Bourg-Saint-Maurice',
+    'Chamonix','Megève','Courchevel','Val d\'Isère','Tignes','Les Deux Alpes','Alpe d\'Huez',
+    'Méribel','Val Thorens','Morzine','Les Gets','Flaine'],
+
   'espagne': ['Madrid','Barcelone','Valence','Séville','Saragosse','Málaga','Murcie',
     'Palma de Majorque','Las Palmas','Bilbao','Alicante','Cordoue','Valladolid','Vigo',
     'Grenade','Cadix','Ibiza','Tenerife','Lanzarote','Fuerteventura','Saint-Sébastien',
@@ -1210,8 +1215,11 @@ function initHebMap() {
       });
     });
 
-    // Clic carte → chercher hébergements proches + afficher marqueurs sélectionnables
-    _hebMap.addListener('click', function(e) { showNearbyHebMarkers(e.latLng); });
+    // Double-clic carte → chercher hébergements proches + afficher marqueurs sélectionnables
+    _hebMap.addListener('dblclick', function(e) {
+      e.stop(); // empêche le zoom natif
+      showNearbyHebMarkers(e.latLng);
+    });
 
     var hint = document.getElementById('hebMapHint');
     if (hint) hint.textContent = '💡 Cliquez sur un marqueur jaune pour sélectionner un hébergement, ou tapez son nom ci-dessus.';
@@ -1422,8 +1430,9 @@ function initVisiterMap() {
     _onVisiterPlaceSelected(place);
   });
 
-  // Clic carte → détails du lieu cliqué
-  _visiterMap.addListener('click', function(e) {
+  // Double-clic carte → détails du lieu cliqué
+  _visiterMap.addListener('dblclick', function(e) {
+    e.stop();
     _searchPlaceAtClick(e.latLng);
   });
 }
@@ -1944,3 +1953,103 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// ── PARAMÈTRES ─────────────────────────────────────────────
+var APP_VERSION = 'v1.1.0';
+
+function renderParametres() {
+  // Mettre à jour les affichages de version
+  var el = document.getElementById('aboutVersion');
+  if (el) el.textContent = APP_VERSION;
+  var elv = document.getElementById('appVersion');
+  if (elv) elv.textContent = APP_VERSION;
+  // Infos export
+  var info = document.getElementById('exportInfo');
+  if (info) {
+    var nb = (state.trips || []).length;
+    info.textContent = nb + ' voyage' + (nb > 1 ? 's' : '') + ' enregistré' + (nb > 1 ? 's' : '');
+  }
+}
+
+function exportData() {
+  try {
+    var data = {
+      version: APP_VERSION,
+      exportDate: new Date().toISOString(),
+      state: state
+    };
+    var json = JSON.stringify(data, null, 2);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var d = new Date();
+    var dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    a.href = url;
+    a.download = 'jpmv-sauvegarde-' + dateStr + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('💾 Sauvegarde téléchargée', 'success');
+    var info = document.getElementById('exportInfo');
+    if (info) info.textContent = '✅ Fichier téléchargé le ' + d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR');
+  } catch(e) {
+    toast('Erreur lors de l\'export', 'error');
+  }
+}
+
+function importData(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  var info = document.getElementById('importInfo');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      // Accepter format direct state ou enveloppé
+      var imported = data.state || data;
+      if (!imported.trips) throw new Error('Format invalide');
+      if (!confirm('⚠️ Remplacer toutes vos données actuelles par cette sauvegarde (' + (imported.trips.length) + ' voyage(s)) ?')) {
+        event.target.value = '';
+        return;
+      }
+      // Fusionner proprement
+      state.trips = imported.trips || [];
+      state.currentTripId = imported.currentTripId || (state.trips[0] ? state.trips[0].id : null);
+      save();
+      loadCurrentTrip();
+      renderTripSelector();
+      navigate(state.currentPage || 'infos');
+      toast('📂 ' + state.trips.length + ' voyage(s) importé(s) !', 'success');
+      if (info) info.textContent = '✅ ' + state.trips.length + ' voyage(s) importé(s) depuis "' + file.name + '"';
+    } catch(err) {
+      toast('Fichier invalide ou corrompu', 'error');
+      if (info) info.textContent = '❌ Erreur : ' + err.message;
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function resetAllData() {
+  if (!confirm('⚠️ Supprimer DÉFINITIVEMENT tous les voyages et données ?\n\nCette action est irréversible.')) return;
+  if (!confirm('Êtes-vous sûr(e) ? Toutes les données seront perdues.')) return;
+  state = { trips: [], currentTripId: null, currentPage: 'infos' };
+  save();
+  renderTripSelector();
+  loadCurrentTrip();
+  navigate('infos');
+  toast('🗑️ Toutes les données supprimées', 'success');
+}
+
+// ── POPUPS D'AIDE ──────────────────────────────────────────
+function toggleHebHelp() {
+  var p = document.getElementById('hebHelpPopup');
+  if (!p) return;
+  p.style.display = p.style.display === 'block' ? 'none' : 'block';
+}
+function toggleVisiterHelp() {
+  var p = document.getElementById('visiterHelpPopup');
+  if (!p) return;
+  p.style.display = p.style.display === 'block' ? 'none' : 'block';
+}

@@ -62,11 +62,14 @@
         <li class="nav-item" data-page="budget" onclick="navigate('budget')">
           <span class="nav-icon">💶</span><span>Budget</span>
         </li>
+        <li class="nav-item" data-page="parametres" onclick="navigate('parametres')">
+          <span class="nav-icon">⚙️</span><span>Paramètres</span>
+        </li>
       </ul>
 
       <div class="sidebar-footer">
-        <div class="app-version">v1.0.0</div>
-        <div class="app-by">by Mykado72</div>
+        <div class="app-version" id="appVersion">v0.0.5</div>
+        <div class="app-by">Par Mickael LEHAY</div>
       </div>
     </nav>
 
@@ -132,12 +135,27 @@
 
             <!-- Carte Google Maps hébergement -->
             <div class="embedded-map-wrap" id="hebMapWrap">
+              <div class="embedded-map-header">
+                <span class="map-section-title">🗺️ Recherche sur la carte</span>
+                <button class="btn-help" onclick="toggleHebHelp()" title="Aide">?</button>
+              </div>
+              <div class="map-help-popup" id="hebHelpPopup">
+                <div class="map-help-close" onclick="toggleHebHelp()">✕</div>
+                <h4>🏨 Comment utiliser la carte Hébergement</h4>
+                <ol>
+                  <li>📍 <b>Vérifiez</b> que la <b>ville</b> est renseignée en haut de la page (champ Ville / Région) — la carte se centre dessus automatiquement.</li>
+                  <li>🏷️ <b>Choisissez</b> le <b>type d'hébergement</b> dans la liste déroulante ci-dessous (Hôtel, Gîte, Camping…) pour filtrer les résultats sur la carte.</li>
+                  <li>🖱️ <b>Double-cliquez</b> sur la carte (ordinateur) ou <b>touchez</b> la carte (mobile) pour afficher les hébergements 🟡 à proximité.</li>
+                  <li>✅ <b>Cliquez sur un marqueur jaune</b> puis sur <b>"✓ Sélectionner"</b> pour remplir automatiquement tous les champs.</li>
+                  <li>🔍 Vous pouvez aussi <b>taper directement</b> le nom dans la barre de recherche ci-dessus.</li>
+                </ol>
+              </div>
               <div class="embedded-map-search-row">
                 <input type="text" id="hebMapSearch" placeholder="Recherchez votre hébergement (nom, adresse…)" autocomplete="off"/>
                 <button class="btn-icon" onclick="locateMeHeb()" title="Ma position">📍</button>
               </div>
               <div id="hebGoogleMap" class="embedded-map"></div>
-              <p class="map-hint" id="hebMapHint">💡 Carte disponible une fois le pays et la ville renseignés — sélectionnez un établissement pour remplir les champs automatiquement.</p>
+              <p class="map-hint" id="hebMapHint">💡 Carte disponible une fois la ville renseignée — double-cliquez sur la carte pour afficher les marqueurs 🟡.</p>
             </div>
 
             <div class="form-grid">
@@ -488,12 +506,35 @@
 
         <!-- Carte Google Maps intégrée dans la page -->
         <div class="embedded-map-wrap" id="visiterMapWrap">
+          <div class="embedded-map-header">
+            <span class="map-section-title">🗺️ Explorer la destination</span>
+            <button class="btn-help" onclick="toggleVisiterHelp()" title="Aide">?</button>
+          </div>
+          <div class="map-help-popup" id="visiterHelpPopup">
+            <div class="map-help-close" onclick="toggleVisiterHelp()">✕</div>
+            <h4>📍 Légende et utilisation</h4>
+            <div class="map-legend">
+              <span>🟢 Vert</span> — Votre hébergement<br>
+              <span>🔵 Bleu</span> — Monument / Site<br>
+              <span>🟠 Orange</span> — Restaurant / Bar<br>
+              <span>🟣 Violet</span> — Musée / Galerie<br>
+              <span>🩷 Rose</span> — Shopping<br>
+              <span>🔴 Rouge</span> — Autre lieu sauvegardé<br>
+            </div>
+            <hr style="border-color:#333;margin:10px 0"/>
+            <b>Pour ajouter un lieu :</b>
+            <ol>
+              <li>🔍 Tapez un nom dans la barre de recherche, <b>ou</b></li>
+              <li>🖱️ <b>Double-cliquez</b> (ordi) / <b>touchez</b> (mobile) sur la carte</li>
+              <li>✅ Un modal s'ouvre avec toutes les infos pré-remplies — validez pour ajouter</li>
+            </ol>
+          </div>
           <div class="embedded-map-search-row">
-            <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu à ajouter (restaurant, monument, musée…)" autocomplete="off"/>
+            <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu (restaurant, monument, musée…)" autocomplete="off"/>
             <button class="btn-icon" onclick="locateMeVisiter()" title="Ma position">📍</button>
           </div>
           <div id="visiterGoogleMap" class="embedded-map embedded-map--tall"></div>
-          <p class="map-hint" id="visiterMapHint">💡 Sélectionnez un lieu sur la carte ou dans la liste de suggestions pour l'ajouter automatiquement à votre liste.</p>
+          <p class="map-hint" id="visiterMapHint">💡 🟢 = hébergement · 🔵🟠🟣 = lieux sauvegardés — double-cliquez sur la carte pour ajouter un lieu.</p>
         </div>
 
         <div class="visiter-filters">
@@ -616,6 +657,54 @@
             <div class="modal-actions">
               <button class="btn-secondary" onclick="closeModal('modalAddDepense')">Annuler</button>
               <button class="btn-primary" onclick="confirmAddDepense()">Ajouter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PAGE: PARAMÈTRES ========== -->
+      <div class="page" id="page-parametres">
+        <div class="page-header">
+          <div>
+            <h1>⚙️ Paramètres</h1>
+            <p class="subtitle">Sauvegarde, import et informations</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <!-- Export -->
+          <div class="card settings-card">
+            <div class="card-header"><span class="card-icon">💾</span><h2>Sauvegarder mes données</h2></div>
+            <p class="settings-desc">Exportez toutes vos données (voyages, lieux, budget, checklists…) dans un fichier JSON. Vous pourrez les réimporter plus tard ou sur un autre appareil.</p>
+            <div class="settings-info" id="exportInfo"></div>
+            <button class="btn-primary btn-settings-action" onclick="exportData()">⬇️ Télécharger la sauvegarde</button>
+          </div>
+
+          <!-- Import -->
+          <div class="card settings-card">
+            <div class="card-header"><span class="card-icon">📂</span><h2>Importer des données</h2></div>
+            <p class="settings-desc">Restaurez une sauvegarde précédente. <strong style="color:var(--danger,#e53935)">⚠️ Attention : cela remplacera toutes vos données actuelles.</strong></p>
+            <label class="btn-secondary btn-settings-action btn-file-label" for="importFile">📁 Choisir un fichier</label>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)"/>
+            <div class="settings-info" id="importInfo"></div>
+          </div>
+
+          <!-- Remise à zéro -->
+          <div class="card settings-card settings-card--danger">
+            <div class="card-header"><span class="card-icon">🗑️</span><h2>Réinitialiser</h2></div>
+            <p class="settings-desc">Supprime définitivement tous les voyages et données. Cette action est irréversible.</p>
+            <button class="btn-danger btn-settings-action" onclick="resetAllData()">🗑️ Tout supprimer</button>
+          </div>
+
+          <!-- Infos app -->
+          <div class="card settings-card">
+            <div class="card-header"><span class="card-icon">ℹ️</span><h2>À propos</h2></div>
+            <div class="settings-about">
+              <div class="about-logo">✈️</div>
+              <div class="about-name">Je Prépare Mon Voyage</div>
+              <div class="about-version" id="aboutVersion">v1.1.0</div>
+              <div class="about-by">by <a href="https://github.com/Mykado72" target="_blank" rel="noopener">Mykado72</a></div>
+              <p class="about-desc">Application PWA de préparation de voyage — fonctionne hors ligne, installable sur mobile et bureau.</p>
             </div>
           </div>
         </div>
