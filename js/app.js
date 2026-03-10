@@ -65,11 +65,29 @@ function fmt(n) {
 }
 
 // ── TRIPS MANAGEMENT ───────────────────────────────────────
-function newTrip() {
+function openNewTripModal() {
   closeDropdown();
-  document.getElementById('newTripName').value = '';
-  openModal('modalNewTrip');
-  setTimeout(function() { document.getElementById('newTripName').focus(); }, 100);
+  // Préremplir avec pays + ville si renseignés
+  var pays = document.getElementById('infoPays') ? document.getElementById('infoPays').value.trim() : '';
+  var ville = document.getElementById('infoVille') ? document.getElementById('infoVille').value.trim() : '';
+  var annee = new Date().getFullYear();
+  // Placeholder dynamique avec l'année en cours
+  var ph = 'ex: Vacances Barcelone ' + annee;
+  document.getElementById('newTripName').placeholder = ph;
+  // Préremplir le champ si pays/ville disponibles
+  var prefill = [ville, pays].filter(Boolean).join(' – ');
+  document.getElementById('newTripName').value = prefill;
+  document.getElementById('modalNewTrip').style.display = 'flex';
+  setTimeout(function() {
+    var inp = document.getElementById('newTripName');
+    inp.focus();
+    // Sélectionner tout pour faciliter la modification
+    inp.select();
+  }, 80);
+}
+
+function newTrip() {
+  openNewTripModal();
 }
 
 function confirmNewTrip() {
@@ -111,11 +129,7 @@ function deleteTrip(id, e) {
   loadCurrentTrip();
   // Si plus aucun voyage, proposer d'en créer un
   if (state.trips.length === 0) {
-    setTimeout(function() {
-      document.getElementById('newTripName').value = '';
-      document.getElementById('modalNewTrip').style.display = 'flex';
-      document.getElementById('newTripName').focus();
-    }, 200);
+    setTimeout(function() { openNewTripModal(); }, 200);
   }
 }
 
@@ -233,7 +247,11 @@ function saveInfos() {
     trip = state.trips[0];
     renderTripSelector();
   }
-  if (!trip) { toast('Créez d\'abord un voyage ✈️', 'error'); return; }
+  // Pas de voyage : ouvrir le modal de création au lieu d'afficher une erreur
+  if (!trip) {
+    openNewTripModal();
+    return;
+  }
   INFO_FIELDS.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) trip.infos[id] = el.value;
@@ -269,6 +287,7 @@ function loadCurrentTrip() {
   });
   updateSubtitle();
   updateNuitsDisplay();
+  updateMapsHebDest();
   // Pré-remplir les dates transport uniquement si champs encore vides
   var hdAller = document.getElementById('infoHeureDepart');
   var hdRetour = document.getElementById('infoHeureDepartRetour');
@@ -576,50 +595,93 @@ function initAutocompletes() {
 
 // Variant of setupAutocomplete that calls a function to get the list (for dynamic lists)
 function setupAutocompleteFunc(inputId, listFn, maxItems) {
+  _setupAC(inputId, null, listFn, maxItems || 12);
+}
+
+function setupAutocomplete(inputId, list, maxItems) {
+  _setupAC(inputId, list, null, maxItems || 8);
+}
+
+// Fonction commune — list fixe OU listFn dynamique
+function _setupAC(inputId, list, listFn, maxItems) {
   var input = document.getElementById(inputId);
   if (!input) return;
-  maxItems = maxItems || 10;
 
   var wrap = document.createElement('div');
-  wrap.style.cssText = 'position:relative;';
+  wrap.style.cssText = 'position:relative;display:block;';
   input.parentNode.insertBefore(wrap, input);
   wrap.appendChild(input);
 
   var dd = document.createElement('div');
   dd.style.cssText = [
-    'display:none','position:absolute','top:100%','left:0','right:0','z-index:500',
+    'display:none','position:absolute','top:100%','left:0','right:0','z-index:600',
     'background:var(--surface2)','border:1.5px solid var(--primary)',
     'border-top:none','border-radius:0 0 8px 8px',
     'max-height:220px','overflow-y:auto','box-shadow:0 8px 24px rgba(0,0,0,0.5)'
   ].join(';');
   wrap.appendChild(dd);
 
+  // Stocker ref directe sur l'input pour pouvoir fermer depuis pickAC
+  input._acDropdown = dd;
+
+  function getList() { return listFn ? listFn() : list; }
+
   function show(val) {
     if (!val || val.length < 1) { dd.style.display = 'none'; return; }
     var q = normalizeStr(val);
-    var list = listFn();
-    var matches = list.filter(function(item) {
+    var matches = getList().filter(function(item) {
       return normalizeStr(item).indexOf(q) !== -1;
     }).slice(0, maxItems);
     if (!matches.length) { dd.style.display = 'none'; return; }
     dd.innerHTML = matches.map(function(m) {
       var norm = normalizeStr(m);
       var idx = norm.indexOf(q);
-      var display = idx >= 0
-        ? escHtml(m.slice(0, idx)) + '<strong style="color:var(--primary)">' + escHtml(m.slice(idx, idx + val.length)) + '</strong>' + escHtml(m.slice(idx + val.length))
+      var highlighted = idx >= 0
+        ? escHtml(m.slice(0, idx))
+          + '<strong style="color:var(--primary)">' + escHtml(m.slice(idx, idx + val.length)) + '</strong>'
+          + escHtml(m.slice(idx + val.length))
         : escHtml(m);
-      return '<div style="padding:9px 14px;cursor:pointer;font-size:0.875rem;border-bottom:1px solid var(--border-light);transition:background 0.1s" ' +
-        'onmouseover="this.style.background=\'var(--surface)\'" ' +
-        'onmouseout="this.style.background=\'\'" ' +
-        'onmousedown="pickAC(event,\'' + inputId + '\',\'' + escHtml(m) + '\')">' + display + '</div>';
+      // ← mousedown pour capturer avant blur, mais on gère la fermeture manuellement
+      return '<div class="_ac-item" data-val="' + escHtml(m) + '" data-field="' + inputId + '" '
+        + 'style="padding:9px 14px;cursor:pointer;font-size:0.875rem;border-bottom:1px solid var(--border-light)">'
+        + highlighted + '</div>';
     }).join('');
+    // Délégation d'événements sur le conteneur (mousedown)
     dd.style.display = 'block';
   }
 
-  input.addEventListener('input', function() { show(input.value); });
-  input.addEventListener('focus', function() { show(input.value); });
-  input.addEventListener('blur', function() { setTimeout(function() { dd.style.display = 'none'; }, 200); });
-  input.addEventListener('keydown', function(e) { if (e.key === 'Escape') dd.style.display = 'none'; });
+  // Délégation unique sur dd pour éviter les problèmes de fermeture
+  dd.addEventListener('mousedown', function(e) {
+    var item = e.target.closest ? e.target.closest('._ac-item') : e.target;
+    if (!item || !item.dataset.val) return;
+    e.preventDefault(); // empêche blur de se déclencher avant qu'on ait lu la valeur
+    var chosenVal = item.dataset.val;
+    var chosenField = item.dataset.field;
+    dd.style.display = 'none';
+    var targetInput = document.getElementById(chosenField);
+    if (!targetInput) return;
+    var oldVal = targetInput.value;
+    targetInput.value = chosenVal;
+    targetInput.blur();
+    // Si le pays change → vider ville
+    if (chosenField === 'infoPays' && oldVal !== chosenVal) {
+      var villeInput = document.getElementById('infoVille');
+      if (villeInput) villeInput.value = '';
+    }
+    if (chosenField === 'infoDateDepart' || chosenField === 'infoDateRetour') updateNuitsDisplay();
+  });
+
+  input.addEventListener('input',  function() { show(input.value); });
+  input.addEventListener('focus',  function() { if (input.value) show(input.value); });
+  input.addEventListener('blur',   function() { setTimeout(function() { dd.style.display = 'none'; }, 150); });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { dd.style.display = 'none'; input.blur(); }
+  });
+}
+
+function pickAC(e, inputId, val) {
+  // Conservé pour compatibilité mais plus utilisé — la logique est dans _setupAC
+  e.preventDefault();
 }
 
 var AEROPORTS_LIST = [
@@ -647,67 +709,7 @@ function normalizeStr(s) {
   return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function setupAutocomplete(inputId, list, maxItems) {
-  var input = document.getElementById(inputId);
-  if (!input) return;
-  maxItems = maxItems || 8;
-
-  var wrap = document.createElement('div');
-  wrap.style.cssText = 'position:relative;';
-  input.parentNode.insertBefore(wrap, input);
-  wrap.appendChild(input);
-
-  var dd = document.createElement('div');
-  dd.style.cssText = [
-    'display:none','position:absolute','top:100%','left:0','right:0','z-index:500',
-    'background:var(--surface2)','border:1.5px solid var(--primary)',
-    'border-top:none','border-radius:0 0 8px 8px',
-    'max-height:200px','overflow-y:auto','box-shadow:0 8px 24px rgba(0,0,0,0.5)'
-  ].join(';');
-  wrap.appendChild(dd);
-
-  function show(val) {
-    if (!val || val.length < 1) { dd.style.display = 'none'; return; }
-    var q = normalizeStr(val);
-    var matches = list.filter(function(item) {
-      return normalizeStr(item).indexOf(q) !== -1;
-    }).slice(0, maxItems);
-    if (!matches.length) { dd.style.display = 'none'; return; }
-    dd.innerHTML = matches.map(function(m) {
-      var norm = normalizeStr(m);
-      var idx = norm.indexOf(q);
-      var display = idx >= 0
-        ? escHtml(m.slice(0, idx)) + '<strong style="color:var(--primary)">' + escHtml(m.slice(idx, idx + val.length)) + '</strong>' + escHtml(m.slice(idx + val.length))
-        : escHtml(m);
-      return '<div style="padding:9px 14px;cursor:pointer;font-size:0.875rem;border-bottom:1px solid var(--border-light);transition:background 0.1s" ' +
-        'onmouseover="this.style.background=\'var(--surface)\'" ' +
-        'onmouseout="this.style.background=\'\'" ' +
-        'onmousedown="pickAC(event,\'' + inputId + '\',\'' + escHtml(m) + '\')">' + display + '</div>';
-    }).join('');
-    dd.style.display = 'block';
-  }
-
-  input.addEventListener('input', function() { show(input.value); });
-  input.addEventListener('focus', function() { show(input.value); });
-  input.addEventListener('blur', function() { setTimeout(function() { dd.style.display = 'none'; }, 200); });
-  input.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') dd.style.display = 'none';
-  });
-}
-
-function pickAC(e, inputId, val) {
-  e.preventDefault();
-  var input = document.getElementById(inputId);
-  if (!input) return;
-  var oldVal = input.value;
-  input.value = val;
-  // Si le pays change, vider le champ ville
-  if (inputId === 'infoPays' && oldVal !== val) {
-    var villeInput = document.getElementById('infoVille');
-    if (villeInput) villeInput.value = '';
-  }
-  if (inputId === 'infoDateDepart' || inputId === 'infoDateRetour') updateNuitsDisplay();
-}
+// (setupAutocomplete et pickAC définis plus haut via _setupAC)
 
 // (initAutocompletes defined above with dynamic villes-by-country)
 
@@ -1092,6 +1094,98 @@ function renderDocuments() {
     '</div></div>';
 }
 
+// ── GOOGLE MAPS SEARCH ─────────────────────────────────────
+function getMapsDestination() {
+  var trip = currentTrip();
+  if (!trip) return '';
+  var ville = (trip.infos && trip.infos.infoVille) || '';
+  var pays  = (trip.infos && trip.infos.infoPays)  || '';
+  return [ville, pays].filter(Boolean).join(', ');
+}
+
+function openMapsSearch() {
+  var query = document.getElementById('mapsSearchInput').value.trim();
+  if (!query) return;
+  var dest = getMapsDestination();
+  var full = dest ? query + ' ' + dest : query;
+  window.open('https://www.google.com/maps/search/' + encodeURIComponent(full), '_blank', 'noopener');
+}
+
+function openMapsCategory(category) {
+  var dest = getMapsDestination();
+  var query = dest ? category + ' ' + dest : category;
+  window.open('https://www.google.com/maps/search/' + encodeURIComponent(query), '_blank', 'noopener');
+}
+
+// Hébergement Maps
+function openMapsHeb() {
+  var query = document.getElementById('mapsHebInput').value.trim();
+  if (!query) return;
+  var dest = getMapsDestination();
+  var full = dest ? query + ' ' + dest : query;
+  window.open('https://www.google.com/maps/search/' + encodeURIComponent(full), '_blank', 'noopener');
+}
+
+function openMapsHebCat(category) {
+  var dest = getMapsDestination();
+  var query = dest ? category + ' ' + dest : category;
+  window.open('https://www.google.com/maps/search/' + encodeURIComponent(query), '_blank', 'noopener');
+}
+
+function updateMapsHebDest() {
+  var dest = getMapsDestination();
+  var el = document.getElementById('mapsHebDest');
+  if (el) {
+    if (dest) { el.textContent = '📍 ' + dest; el.style.display = 'inline-block'; }
+    else { el.textContent = ''; el.style.display = 'none'; }
+  }
+}
+
+// Bouton Hôtels depuis "À visiter" → proposition
+function openMapsHotelWithProposal() {
+  var dest = getMapsDestination();
+  var el = document.getElementById('hotelProposalDest');
+  if (el) el.textContent = dest || 'votre destination';
+  document.getElementById('modalHotelProposal').style.display = 'flex';
+}
+
+function goSearchHotelsAndFill() {
+  closeModal('modalHotelProposal');
+  openMapsHebCat('hôtels');
+  // Après fermeture, naviguer vers infos pour faciliter le remplissage
+  setTimeout(function() {
+    navigate('infos');
+    // Scroll vers la section hébergement
+    var hebCard = document.getElementById('infoNomHebergement');
+    if (hebCard) {
+      hebCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      hebCard.focus();
+    }
+  }, 800);
+}
+
+function goToHebergement() {
+  closeModal('modalHotelProposal');
+  navigate('infos');
+  setTimeout(function() {
+    var hebCard = document.getElementById('infoNomHebergement');
+    if (hebCard) {
+      hebCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      hebCard.focus();
+    }
+  }, 300);
+}
+
+function updateMapsSearchDest() {
+  var dest = getMapsDestination();
+  var el = document.getElementById('mapsSearchDest');
+  if (el) {
+    if (dest) { el.textContent = '📍 ' + dest; el.style.display = 'inline-block'; }
+    else { el.textContent = ''; el.style.display = 'none'; }
+  }
+  updateMapsHebDest();
+}
+
 // ── À VISITER ──────────────────────────────────────────────
 var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', nature:'🌿', musee:'🖼️', shopping:'🛍️', autre:'📌' };
 var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', nature:'Nature', musee:'Musée', shopping:'Shopping', autre:'Autre' };
@@ -1100,6 +1194,7 @@ var currentLieuFilter = 'tous';
 function renderLieux() {
   var trip = currentTrip();
   var container = document.getElementById('lieuxContainer');
+  updateMapsSearchDest();
   if (!trip) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun voyage sélectionné</h2></div>';
     return;
@@ -1296,11 +1391,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var sub = document.getElementById('infosSubtitle');
     if (sub) sub.textContent = 'Créez votre premier voyage pour commencer';
     // Ouvrir automatiquement le modal "Nouveau voyage"
-    setTimeout(function() {
-      document.getElementById('newTripName').value = '';
-      document.getElementById('modalNewTrip').style.display = 'flex';
-      document.getElementById('newTripName').focus();
-    }, 300);
+    setTimeout(function() { openNewTripModal(); }, 300);
   }
 
   navigate(state.currentPage || 'infos');

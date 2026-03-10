@@ -413,3 +413,112 @@ textarea { resize: vertical; min-height: 70px; }
   .page-header { flex-direction: column; gap: 12px; }
   .budget-summary { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── MAPS SEARCH PANEL ─────────────────────────────── */
+.maps-search-panel {
+  background: linear-gradient(135deg, rgba(33,150,243,0.08) 0%, rgba(33,150,243,0.03) 100%);
+  border: 1.5px solid rgba(33,150,243,0.25);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.maps-search-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.maps-search-icon { font-size: 1.2rem; }
+.maps-search-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.maps-search-dest {
+  font-size: 0.78rem;
+  color: var(--primary);
+  background: rgba(33,150,243,0.12);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.maps-search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.maps-search-bar input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.maps-search-bar input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.btn-maps-search {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.btn-maps-search:hover { opacity: 0.88; }
+.maps-quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.maps-quick-btn {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text2);
+  border-radius: 20px;
+  padding: 5px 13px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.maps-quick-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(33,150,243,0.08);
+}
+
+/* Maps panel compact (dans les cards) */
+.maps-search-panel--compact {
+  margin: 0 0 18px 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+}
+.maps-search-hint {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--text3);
+  font-style: italic;
+}
+
+/* Bouton Hôtels spécial dans À visiter */
+.maps-quick-btn--hotel {
+  border-color: rgba(33,150,243,0.5);
+  color: var(--primary);
+  background: rgba(33,150,243,0.07);
+  font-weight: 600;
+}
+.maps-quick-btn--hotel:hover {
+  background: rgba(33,150,243,0.15);
+}

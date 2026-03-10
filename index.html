@@ -127,6 +127,31 @@
           <!-- Hébergement -->
           <div class="card">
             <div class="card-header"><span class="card-icon">🏨</span><h2>Hébergement</h2></div>
+
+            <!-- Panneau recherche hébergement -->
+            <div class="maps-search-panel maps-search-panel--compact">
+              <div class="maps-search-header">
+                <span class="maps-search-icon">🔍</span>
+                <span class="maps-search-title">Rechercher un hébergement</span>
+                <span class="maps-search-dest" id="mapsHebDest"></span>
+              </div>
+              <div class="maps-search-bar">
+                <input type="text" id="mapsHebInput" placeholder="Nom d'hôtel, quartier, type…" onkeypress="if(event.key==='Enter') openMapsHeb()"/>
+                <button class="btn-maps-search" onclick="openMapsHeb()">🔍 Rechercher</button>
+              </div>
+              <div class="maps-quick-btns">
+                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels')">🏨 Hôtels</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels boutique')">✨ Boutique</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('airbnb location vacances')">🏠 Airbnb</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('gîtes chambres hôtes')">🏡 Gîtes</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('campings')">⛺ Campings</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('auberges de jeunesse hostels')">🛏️ Auberges</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('appart hôtels résidences')">🏢 Appart-hôtels</button>
+                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels luxe 5 étoiles')">⭐ Luxe 5★</button>
+              </div>
+              <p class="maps-search-hint">💡 Après avoir trouvé votre hébergement, renseignez son nom et son adresse dans les champs ci-dessous.</p>
+            </div>
+
             <div class="form-grid">
               <div class="form-group">
                 <label>Type d'hébergement</label>
@@ -465,6 +490,33 @@
           </div>
         </div>
 
+        <!-- Panneau recherche Google Maps -->
+        <div class="maps-search-panel" id="mapsSearchPanel">
+          <div class="maps-search-header">
+            <span class="maps-search-icon">🗺️</span>
+            <span class="maps-search-title">Rechercher sur Google Maps</span>
+            <span class="maps-search-dest" id="mapsSearchDest"></span>
+          </div>
+          <div class="maps-search-bar">
+            <input type="text" id="mapsSearchInput" placeholder="Recherche libre : musée, plage, pharmacie…" onkeypress="if(event.key==='Enter') openMapsSearch()"/>
+            <button class="btn-maps-search" onclick="openMapsSearch()">🔍 Rechercher</button>
+          </div>
+          <div class="maps-quick-btns">
+            <button class="maps-quick-btn maps-quick-btn--hotel" onclick="openMapsHotelWithProposal()">🏨 Hôtels</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('restaurants')">🍽️ Restaurants</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('attractions touristiques')">🏛️ Monuments</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('musées')">🖼️ Musées</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('plages')">🏖️ Plages</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('bars')">🍸 Bars</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('shopping centres commerciaux')">🛍️ Shopping</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('parcs jardins')">🌿 Nature</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('pharmacies')">💊 Pharmacies</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('supermarchés')">🛒 Supermarchés</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('transports en commun')">🚌 Transports</button>
+            <button class="maps-quick-btn" onclick="openMapsCategory('locations de voitures')">🚗 Location voiture</button>
+          </div>
+        </div>
+
         <div class="visiter-filters">
           <button class="filter-btn active" data-filter="tous" onclick="filterLieux('tous', this)">Tous</button>
           <button class="filter-btn" data-filter="monument" onclick="filterLieux('monument', this)">🏛️ Monuments</button>
@@ -582,6 +634,24 @@
     <!-- Toast notification -->
     <div class="toast" id="toast"></div>
 
+    <!-- Modal proposition hébergement -->
+    <div class="modal" id="modalHotelProposal">
+      <div class="modal-content modal-sm">
+        <div class="modal-header">
+          <h3>🏨 Recherche d'hôtel</h3>
+          <button class="modal-close" onclick="closeModal('modalHotelProposal')">✕</button>
+        </div>
+        <p style="color:var(--text2);font-size:0.9rem;margin-bottom:18px;line-height:1.5">
+          Voulez-vous ouvrir Google Maps pour chercher des hôtels à <strong id="hotelProposalDest"></strong>, puis renseigner votre hébergement ?
+        </p>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closeModal('modalHotelProposal')">Annuler</button>
+          <button class="btn-primary" onclick="goSearchHotelsAndFill()">🔍 Chercher sur Maps</button>
+          <button class="btn-primary" style="background:var(--success,#4caf50)" onclick="goToHebergement()">📝 Remplir hébergement</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal nouveau voyage -->
     <div class="modal" id="modalNewTrip">
       <div class="modal-content modal-sm">
@@ -591,7 +661,7 @@
         </div>
         <div class="form-group">
           <label>Nom du voyage</label>
-          <input type="text" id="newTripName" placeholder="ex: Vacances Barcelone 2025" onkeypress="if(event.key==='Enter') confirmNewTrip()"/>
+          <input type="text" id="newTripName" placeholder="" onkeypress="if(event.key==='Enter') confirmNewTrip()"/>
         </div>
         <div class="modal-actions">
           <button class="btn-secondary" onclick="closeModal('modalNewTrip')">Annuler</button>
