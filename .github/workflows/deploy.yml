@@ -59,7 +59,7 @@ jobs:
           if git diff --quiet; then
             echo "Aucun changement de version à committer"
           else
-            git add wwwroot/js/app.js wwwroot/index.html
+            git add js/app.js index.html
             git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]"
             git push
           fi
@@ -69,5 +69,5 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./wwwroot
+          publish_dir: ./
           publish_branch: gh-pages
