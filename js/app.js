@@ -209,9 +209,19 @@ function navigate(page) {
   if (page === 'checklist') refreshChecklist();
   else if (page === 'bagages') renderBagages();
   else if (page === 'documents') renderDocuments();
-  else if (page === 'visiter') { renderLieux(); setTimeout(function() { if (!_visiterMap) initVisiterMap(); else google.maps.event.trigger(_visiterMap, 'resize'); }, 150); }
+  else if (page === 'visiter') {
+    // Détruire l'instance précédente pour forcer une réinitialisation propre
+    _visiterMap = null; _visiterMarker = null; _visiterAutocomplete = null; _visiterHebMarker = null;
+    _visiterLieuMarkers = [];
+    renderLieux();
+    setTimeout(initVisiterMap, 100);
+  }
   else if (page === 'budget') renderBudget();
-  else if (page === 'infos') { setTimeout(function() { refreshHebMap(); }, 200); }
+  else if (page === 'infos') {
+    // Détruire l'instance précédente pour forcer une réinitialisation propre
+    _hebMap = null; _hebMarker = null; _hebAutocomplete = null; _hebInfoWindow = null;
+    setTimeout(refreshHebMap, 100);
+  }
 }
 
 function toggleSidebar() {
@@ -1204,15 +1214,7 @@ function refreshHebMap() {
   if (!_googleMapsReady || !window.google) return;
   var dest = getMapsDestination();
   if (!dest) return;
-  if (_hebMap) {
-    // Carte déjà créée → recentrer sur la nouvelle destination
-    var geocoder = new google.maps.Geocoder();
-    geocoder.geocode({ address: dest, language: 'fr' }, function(results, status) {
-      if (status === 'OK') { _hebMap.setCenter(results[0].geometry.location); _hebMap.setZoom(13); }
-    });
-  } else {
-    initHebMap();
-  }
+  initHebMap();
 }
 
 function fillHebergementFromPlace(place) {
@@ -1484,8 +1486,12 @@ function _darkMapStyles() {
 
 // Fonctions hébergement Maps externes (panneaux de recherche) conservées pour compatibilité
 function getMapsDestination() {
-  var trip = currentTrip(); if (!trip) return '';
-  return [trip.infos && trip.infos.infoVille, trip.infos && trip.infos.infoPays].filter(Boolean).join(', ');
+  // Lire depuis le DOM en priorité (avant sauvegarde), fallback sur state
+  var ville = (document.getElementById('infoVille') || {}).value
+    || (currentTrip() && currentTrip().infos && currentTrip().infos.infoVille) || '';
+  var pays  = (document.getElementById('infoPays')  || {}).value
+    || (currentTrip() && currentTrip().infos && currentTrip().infos.infoPays)  || '';
+  return [ville, pays].filter(Boolean).join(', ');
 }
 function openMapsSearch() {
   var q = (document.getElementById('mapsSearchInput') || {}).value; if (!q) return;
@@ -1527,6 +1533,7 @@ function renderLieux() {
   updateMapsSearchDest();
   if (!trip) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun voyage sélectionné</h2></div>';
+    _renderVisiterMarkers();
     return;
   }
   var dest = [trip.infos && trip.infos.infoVille, trip.infos && trip.infos.infoPays].filter(Boolean).join(', ');
@@ -1537,13 +1544,10 @@ function renderLieux() {
     geocodeHebergement();
   }
 
-  // Init carte visiter si pas encore faite
-  if (_googleMapsReady && !_visiterMap) setTimeout(initVisiterMap, 200);
-  else if (_visiterMap) { _visiterMap.setCenter(center && trip.infos && trip.infos._hebLat ? { lat: parseFloat(trip.infos._hebLat), lng: parseFloat(trip.infos._hebLon) } : { lat: 48.8566, lng: 2.3522 }); }
-
   var lieux = (trip.lieux || []).filter(function(l) { return currentLieuFilter === 'tous' || l.cat === currentLieuFilter; });
   if (!lieux.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><h2>Aucun lieu' + (currentLieuFilter !== 'tous' ? ' dans cette catégorie' : '') + '</h2><p>Cliquez sur "+ Ajouter un lieu" pour commencer</p></div>';
+    _renderVisiterMarkers();
     return;
   }
 
