@@ -95,7 +95,7 @@ function confirmNewTrip() {
   if (!name) { toast('Donnez un nom au voyage', 'error'); return; }
   var trip = {
     id: genId(), name: name,
-    infos: {},
+    infos: { infoNbVoyageurs: '2' },
     checklist: [],
     bagages: defaultBagages(),
     lieux: [],
@@ -1573,16 +1573,15 @@ function initHebMap() {
     var searchEl = document.getElementById('hebMapSearch');
     if (searchEl && cityVal && !searchEl.value) searchEl.value = cityVal;
 
-    // Double-clic carte → chercher hébergements proches + afficher marqueurs sélectionnables
-    _hebMap.addListener('dblclick', function(e) {
-      e.stop(); // empêche le zoom natif
+    // Clic simple → marqueurs jaunes à proximité
+    _hebMap.addListener('click', function(e) {
       showNearbyHebMarkers(e.latLng);
     });
 
     var hint = document.getElementById('hebMapHint');
-    if (hint) hint.textContent = '💡 Cliquez sur un marqueur jaune pour sélectionner un hébergement, ou tapez son nom ci-dessus.';
+    if (hint) hint.textContent = '💡 Cliquez sur la carte pour afficher les hébergements 🟡 à proximité, ou tapez le nom dans la barre ci-dessus.';
 
-    // Afficher automatiquement les hébergements autour du centre
+    // Afficher automatiquement les hébergements autour du centre au chargement
     setTimeout(function() {
       if (_hebMap) showNearbyHebMarkers(_hebMap.getCenter());
     }, 600);
@@ -1679,37 +1678,47 @@ function onHebTypeChange() {
   if (_hebMap) showNearbyHebMarkers(_hebMap.getCenter());
 }
 
-var _hebSearchMarkers = []; // marqueurs des résultats de recherche hébergement
+// InfoWindow unique partagée pour hébergement (ferme l'ancienne automatiquement)
+var _hebActiveIW = null;
 
 function showNearbyHebMarkers(latLng) {
   if (!_hebMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_hebMap);
   var types = _hebGoogleTypes();
   service.nearbySearch({
-    location: latLng, radius: 500,
+    location: latLng, radius: 800,
     type: types[0], language: 'fr'
   }, function(results, status) {
-    // Effacer anciens marqueurs de recherche
+    // Effacer anciens marqueurs
     _hebSearchMarkers.forEach(function(m) { m.setMap(null); });
     _hebSearchMarkers = [];
+    if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
     if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) return;
-    results.slice(0, 8).forEach(function(place) {
+
+    results.slice(0, 15).forEach(function(place, idx) {
       var pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+      var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + pos.lat + ',' + pos.lng + '&query_place_id=' + place.place_id;
       var marker = new google.maps.Marker({
         map: _hebMap, position: pos,
         title: place.name,
         icon: { url: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png' },
-        animation: google.maps.Animation.DROP
+        animation: idx < 3 ? google.maps.Animation.DROP : null
       });
       var iw = new google.maps.InfoWindow({
-        content: '<div style="color:#111;font-size:13px;max-width:200px;cursor:pointer">'
+        content: '<div style="color:#111;font-size:13px;max-width:240px">'
           + '<b>' + escHtml(place.name) + '</b>'
           + (place.rating ? '<br>⭐ ' + place.rating : '')
-          + (place.vicinity ? '<br><span style="color:#555">' + escHtml(place.vicinity) + '</span>' : '')
-          + '<br><button onclick="selectHebPlace(\'' + place.place_id + '\')" style="margin-top:6px;padding:4px 10px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">✓ Sélectionner</button>'
-          + '</div>'
+          + (place.vicinity ? '<br><span style="color:#555;font-size:11px">' + escHtml(place.vicinity) + '</span>' : '')
+          + '<br><div style="display:flex;gap:6px;margin-top:7px">'
+          + '<button onclick="selectHebPlace(\'' + place.place_id + '\')" style="flex:1;padding:5px 8px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">✓ Sélectionner</button>'
+          + '<a href="' + mapsUrl + '" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;text-decoration:none;text-align:center">🗺️ Maps</a>'
+          + '</div></div>'
       });
-      marker.addListener('click', function() { iw.open(_hebMap, marker); });
+      marker.addListener('click', function() {
+        if (_hebActiveIW) _hebActiveIW.close();
+        _hebActiveIW = iw;
+        iw.open(_hebMap, marker);
+      });
       _hebSearchMarkers.push(marker);
     });
   });
@@ -1836,14 +1845,18 @@ function _buildVisiterMap(center, zoom) {
     });
   });
 
-  // Double-clic → marqueurs jaunes à proximité
-  _visiterMap.addListener('dblclick', function(e) {
-    e.stop();
+  // Clic simple → marqueurs jaunes à proximité
+  _visiterMap.addListener('click', function(e) {
     _showVisiterSearchMarkers(e.latLng, null);
   });
 
   var hint = document.getElementById('visiterMapHint');
-  if (hint) hint.textContent = '💡 🟢 = hébergement · Couleurs = lieux sauvegardés · Double-cliquez sur la carte pour chercher des lieux.';
+  if (hint) hint.textContent = '💡 🟢 = hébergement · Cliquez sur la carte pour afficher les lieux 🟡 à proximité.';
+
+  // Afficher automatiquement des marqueurs autour du centre au chargement
+  setTimeout(function() {
+    if (_visiterMap) _showVisiterSearchMarkers(_visiterMap.getCenter(), null);
+  }, 700);
 }
 
 // Affiche le marqueur vert de l'hébergement sur la carte visiter
@@ -1865,72 +1878,78 @@ function _renderHebMarkerOnVisiter() {
   iw.open(_visiterMap, _visiterHebMarker);
 }
 
-// Affiche les marqueurs jaunes de résultats de recherche (même logique que showNearbyHebMarkers)
+// InfoWindow unique partagée pour visiter (ferme l'ancienne automatiquement)
+var _visiterActiveIW = null;
+
+// Affiche les marqueurs jaunes de résultats de recherche
 function _showVisiterSearchMarkers(latLng, directPlace) {
   if (!_visiterMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_visiterMap);
 
-  // Effacer anciens marqueurs jaunes
+  // Effacer anciens marqueurs jaunes et fermer infowindow active
   _visiterSearchMarkers.forEach(function(m) { m.setMap(null); });
   _visiterSearchMarkers = [];
-  if (_visiterInfoWindow) _visiterInfoWindow.close();
+  if (_visiterActiveIW) { _visiterActiveIW.close(); _visiterActiveIW = null; }
 
-  // Si on a déjà un lieu précis (depuis autocomplete), l'afficher directement en marqueur jaune
+  // Lieu précis depuis autocomplete → marqueur jaune direct
   if (directPlace && directPlace.geometry) {
     _placeVisiterSearchMarker(directPlace, 0);
     _visiterMap.panTo(directPlace.geometry.location);
     return;
   }
 
-  // Sinon : recherche de lieux à proximité selon le filtre actif
+  // Recherche à proximité selon filtre actif
   var catKeywords = {
-    tous:       null,
     monument:   'tourist attraction monument site',
     restaurant: 'restaurant',
     nature:     'park nature beach',
     musee:      'museum',
-    shopping:   'shopping mall store',
-    autre:      null
+    shopping:   'shopping mall store'
   };
   var keyword = catKeywords[currentLieuFilter];
-  var searchParams = { location: latLng, radius: 500, language: 'fr' };
+  var searchParams = { location: latLng, radius: 800, language: 'fr' };
   if (keyword) searchParams.keyword = keyword;
 
   service.nearbySearch(searchParams, function(results, status) {
     if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) {
       // Fallback sans filtre
-      service.nearbySearch({ location: latLng, radius: 500, language: 'fr' }, function(r2, s2) {
+      service.nearbySearch({ location: latLng, radius: 800, language: 'fr' }, function(r2, s2) {
         if (s2 === google.maps.places.PlacesServiceStatus.OK && r2.length) {
-          r2.slice(0, 8).forEach(function(p, i) { _placeVisiterSearchMarker(p, i); });
+          r2.slice(0, 15).forEach(function(p, i) { _placeVisiterSearchMarker(p, i); });
         }
       });
       return;
     }
-    results.slice(0, 8).forEach(function(p, i) { _placeVisiterSearchMarker(p, i); });
+    results.slice(0, 15).forEach(function(p, i) { _placeVisiterSearchMarker(p, i); });
   });
 }
 
-// Place un seul marqueur jaune et son infowindow avec bouton "Ajouter"
+// Place un marqueur jaune avec infowindow (ferme les autres au clic)
 function _placeVisiterSearchMarker(place, idx) {
   if (!place.geometry) return;
   var pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + pos.lat + ',' + pos.lng + '&query_place_id=' + place.place_id;
   var marker = new google.maps.Marker({
     map: _visiterMap, position: pos,
     title: place.name,
     icon: { url: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png' },
-    animation: idx === 0 ? google.maps.Animation.DROP : null
+    animation: idx < 3 ? google.maps.Animation.DROP : null
   });
   var iw = new google.maps.InfoWindow({
-    content: '<div style="color:#111;font-size:13px;max-width:220px">'
+    content: '<div style="color:#111;font-size:13px;max-width:240px">'
       + '<b>' + escHtml(place.name) + '</b>'
       + (place.rating ? '<br>⭐ ' + place.rating : '')
       + (place.vicinity ? '<br><span style="color:#555;font-size:11px">' + escHtml(place.vicinity) + '</span>' : '')
-      + '<br><button onclick="selectVisiterPlace(\'' + place.place_id + '\')" '
-      + 'style="margin-top:7px;padding:5px 12px;background:#1976D2;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">'
-      + '＋ Ajouter ce lieu</button>'
-      + '</div>'
+      + '<br><div style="display:flex;gap:6px;margin-top:7px">'
+      + '<button onclick="selectVisiterPlace(\'' + place.place_id + '\')" style="flex:1;padding:5px 8px;background:#1976D2;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">＋ Ajouter</button>'
+      + '<a href="' + mapsUrl + '" target="_blank" rel="noopener" style="flex:1;padding:5px 8px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;text-decoration:none;text-align:center">🗺️ Maps</a>'
+      + '</div></div>'
   });
-  marker.addListener('click', function() { iw.open(_visiterMap, marker); });
+  marker.addListener('click', function() {
+    if (_visiterActiveIW) _visiterActiveIW.close();
+    _visiterActiveIW = iw;
+    iw.open(_visiterMap, marker);
+  });
   _visiterSearchMarkers.push(marker);
 }
 
