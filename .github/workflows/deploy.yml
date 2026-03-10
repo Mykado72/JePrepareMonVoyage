@@ -1,0 +1,73 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      # 1. Récupérer le code
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # nécessaire pour compter les commits
+
+      # 2. Calculer le numéro de build
+      - name: Compute version
+        id: version
+        run: |
+          # Numéro de build = nombre total de commits sur main
+          BUILD=$(git rev-list --count HEAD)
+          
+          # Extraire MAJEUR.MINEUR depuis app.js (ex: "v1.1.0" → "1.1")
+          CURRENT=$(grep "APP_VERSION" wwwroot/js/app.js | grep -oP "v\K[0-9]+\.[0-9]+")
+          
+          # Construire la nouvelle version
+          NEW_VERSION="v${CURRENT}.${BUILD}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version : $NEW_VERSION"
+
+      # 3. Mettre à jour la version dans les fichiers
+      - name: Update version in files
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          DATE=$(date +'%Y-%m-%d')
+          
+          # Mettre à jour app.js
+          sed -i "s|var APP_VERSION = '.*'; // @version|var APP_VERSION = '${VERSION}'; // @version|" wwwroot/js/app.js
+          
+          # Mettre à jour index.html
+          sed -i "s|<div class=\"app-version\" id=\"appVersion\">.*</div> <!-- @version -->|<div class=\"app-version\" id=\"appVersion\">${VERSION}</div> <!-- @version -->|" wwwroot/index.html
+          
+          echo "✅ Version mise à jour : $VERSION ($DATE)"
+
+      # 4. Committer la mise à jour de version
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Vérifier s'il y a des changements à committer
+          if git diff --quiet; then
+            echo "Aucun changement de version à committer"
+          else
+            git add wwwroot/js/app.js wwwroot/index.html
+            git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]"
+            git push
+          fi
+
+      # 5. Déployer sur GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./wwwroot
+          publish_branch: gh-pages
