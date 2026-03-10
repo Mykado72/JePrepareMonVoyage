@@ -210,15 +210,19 @@ function navigate(page) {
   else if (page === 'bagages') renderBagages();
   else if (page === 'documents') renderDocuments();
   else if (page === 'visiter') {
-    // Détruire l'instance précédente pour forcer une réinitialisation propre
-    _visiterMap = null; _visiterMarker = null; _visiterAutocomplete = null; _visiterHebMarker = null;
-    _visiterLieuMarkers = [];
     renderLieux();
-    setTimeout(initVisiterMap, 100);
+    setTimeout(function() {
+      if (!_visiterMap) {
+        initVisiterMap();
+      } else {
+        google.maps.event.trigger(_visiterMap, 'resize');
+        _renderVisiterMarkers();
+      }
+    }, 100);
   }
   else if (page === 'budget') renderBudget();
   else if (page === 'infos') {
-    // Détruire l'instance précédente pour forcer une réinitialisation propre
+    // Détruire l'instance pour forcer réinit propre (le div est caché/réaffiché)
     _hebMap = null; _hebMarker = null; _hebAutocomplete = null; _hebInfoWindow = null;
     setTimeout(refreshHebMap, 100);
   }
@@ -1199,12 +1203,17 @@ function initHebMap() {
         fields: ['name','formatted_address','formatted_phone_number','website',
                  'rating','user_ratings_total','geometry','types','place_id']
       }, function(detail, st) {
-        fillHebergementFromPlace(st === google.maps.places.PlacesServiceStatus.OK ? detail : place);
+        var p = st === google.maps.places.PlacesServiceStatus.OK ? detail : place;
+        var searchInput = document.getElementById('hebMapSearch');
+        if (searchInput) searchInput.value = p.name || '';
+        fillHebergementFromPlace(p);
       });
     });
 
-    // Clic carte → chercher établissements proches
-    _hebMap.addListener('click', function(e) { searchNearbyHeb(e.latLng); });
+    // Clic carte → chercher hébergements proches + afficher marqueurs sélectionnables
+    _hebMap.addListener('click', function(e) { showNearbyHebMarkers(e.latLng); });
+
+    document.getElementById('hebMapHint').textContent = '💡 Tapez le nom de votre hébergement ou cliquez sur la carte.';
 
     document.getElementById('hebMapHint').textContent = '💡 Tapez le nom de votre hébergement ou cliquez sur la carte.';
   });
@@ -1260,22 +1269,100 @@ function fillHebergementFromPlace(place) {
   }
 }
 
+// Mapping type hébergement → types Google Places
+function _hebGoogleTypes() {
+  var sel = document.getElementById('infoTypeHebergement');
+  var val = sel ? sel.value : '';
+  if (val === 'camping')  return ['campground'];
+  if (val === 'airbnb')   return ['lodging'];
+  if (val === 'gite')     return ['lodging'];
+  return ['lodging']; // hotel, autre, vide → lodging
+}
+
 function searchNearbyHeb(latLng) {
   if (!_hebMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_hebMap);
+  var types = _hebGoogleTypes();
   service.nearbySearch({
-    location: latLng,
-    radius: 200,
-    type: ['lodging'],
-    language: 'fr'
+    location: latLng, radius: 300,
+    type: types[0], language: 'fr'
   }, function(results, status) {
-    if (status === google.maps.places.PlacesServiceStatus.OK && results.length) {
-      // Prendre le plus proche
-      service.getDetails({ placeId: results[0].place_id, language: 'fr',
-        fields: ['name','formatted_address','formatted_phone_number','website','rating','user_ratings_total','geometry','types']
-      }, function(place, st) {
-        if (st === google.maps.places.PlacesServiceStatus.OK) fillHebergementFromPlace(place);
+    if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) return;
+    service.getDetails({
+      placeId: results[0].place_id, language: 'fr',
+      fields: ['name','formatted_address','formatted_phone_number','website',
+               'rating','user_ratings_total','geometry','types','place_id']
+    }, function(place, st) {
+      if (st === google.maps.places.PlacesServiceStatus.OK) {
+        // Mettre à jour le champ de recherche avec le nom trouvé
+        var searchInput = document.getElementById('hebMapSearch');
+        if (searchInput) searchInput.value = place.name || '';
+        fillHebergementFromPlace(place);
+      }
+    });
+  });
+}
+
+// Appelée quand on change le type d'hébergement → relancer une recherche autour du centre actuel
+function onHebTypeChange() {
+  updateHebergementUI();
+  if (_hebMap) {
+    var center = _hebMap.getCenter();
+    if (center) searchNearbyHeb(center);
+  }
+}
+
+var _hebSearchMarkers = []; // marqueurs des résultats de recherche hébergement
+
+function showNearbyHebMarkers(latLng) {
+  if (!_hebMap || !window.google) return;
+  var service = new google.maps.places.PlacesService(_hebMap);
+  var types = _hebGoogleTypes();
+  service.nearbySearch({
+    location: latLng, radius: 500,
+    type: types[0], language: 'fr'
+  }, function(results, status) {
+    // Effacer anciens marqueurs de recherche
+    _hebSearchMarkers.forEach(function(m) { m.setMap(null); });
+    _hebSearchMarkers = [];
+    if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) return;
+    results.slice(0, 8).forEach(function(place) {
+      var pos = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+      var marker = new google.maps.Marker({
+        map: _hebMap, position: pos,
+        title: place.name,
+        icon: { url: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png' },
+        animation: google.maps.Animation.DROP
       });
+      var iw = new google.maps.InfoWindow({
+        content: '<div style="color:#111;font-size:13px;max-width:200px;cursor:pointer">'
+          + '<b>' + escHtml(place.name) + '</b>'
+          + (place.rating ? '<br>⭐ ' + place.rating : '')
+          + (place.vicinity ? '<br><span style="color:#555">' + escHtml(place.vicinity) + '</span>' : '')
+          + '<br><button onclick="selectHebPlace(\'' + place.place_id + '\')" style="margin-top:6px;padding:4px 10px;background:#2196F3;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">✓ Sélectionner</button>'
+          + '</div>'
+      });
+      marker.addListener('click', function() { iw.open(_hebMap, marker); });
+      _hebSearchMarkers.push(marker);
+    });
+  });
+}
+
+function selectHebPlace(placeId) {
+  if (!_hebMap || !window.google) return;
+  var service = new google.maps.places.PlacesService(_hebMap);
+  service.getDetails({
+    placeId: placeId, language: 'fr',
+    fields: ['name','formatted_address','formatted_phone_number','website',
+             'rating','user_ratings_total','geometry','types','place_id']
+  }, function(place, st) {
+    if (st === google.maps.places.PlacesServiceStatus.OK) {
+      var searchInput = document.getElementById('hebMapSearch');
+      if (searchInput) searchInput.value = place.name || '';
+      fillHebergementFromPlace(place);
+      // Effacer les marqueurs de recherche
+      _hebSearchMarkers.forEach(function(m) { m.setMap(null); });
+      _hebSearchMarkers = [];
     }
   });
 }
@@ -1342,22 +1429,41 @@ function initVisiterMap() {
 
 function _renderVisiterMarkers() {
   if (!_visiterMap) return;
-  // Effacer les anciens marqueurs lieux
+  // Effacer les anciens marqueurs
   _visiterLieuMarkers.forEach(function(m) { m.setMap(null); });
   _visiterLieuMarkers = [];
   var trip = currentTrip(); if (!trip || !trip.lieux) return;
-  trip.lieux.forEach(function(l) {
+
+  // Icônes par catégorie
+  var catIcons = {
+    monument:   'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+    restaurant: 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png',
+    nature:     'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
+    musee:      'https://maps.google.com/mapfiles/ms/icons/purple-dot.png',
+    shopping:   'https://maps.google.com/mapfiles/ms/icons/pink-dot.png',
+    autre:      'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+  };
+
+  // Filtrer selon le filtre actif
+  var filtered = trip.lieux.filter(function(l) {
+    return currentLieuFilter === 'tous' || l.cat === currentLieuFilter;
+  });
+
+  filtered.forEach(function(l) {
     if (!l.lat || !l.lon) return;
+    var icon = catIcons[l.cat] || catIcons.autre;
     var marker = new google.maps.Marker({
       map: _visiterMap,
       position: { lat: parseFloat(l.lat), lng: parseFloat(l.lon) },
-      title: l.nom,
-      icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+      title: l.nom, icon: { url: icon }
     });
     var iw = new google.maps.InfoWindow({
-      content: '<div style="color:#111;font-size:12px"><b>' + escHtml(l.nom) + '</b>'
+      content: '<div style="color:#111;font-size:12px;max-width:180px">'
+        + '<b>' + escHtml(l.nom) + '</b>'
         + (l.distance ? '<br>📏 ' + escHtml(l.distance) : '')
-        + (l.rating   ? '<br>⭐ ' + escHtml(l.rating)   : '') + '</div>'
+        + (l.rating   ? '<br>⭐ ' + escHtml(l.rating)   : '')
+        + (l.adresse  ? '<br><span style="color:#555">' + escHtml(l.adresse.split(',')[0]) + '</span>' : '')
+        + '</div>'
     });
     marker.addListener('click', function() { iw.open(_visiterMap, marker); });
     _visiterLieuMarkers.push(marker);
@@ -1585,6 +1691,11 @@ function filterLieux(filter, btn) {
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   renderLieux();
+  // Forcer le rafraîchissement des marqueurs même si la carte existe déjà
+  if (_visiterMap) {
+    google.maps.event.trigger(_visiterMap, 'resize');
+    _renderVisiterMarkers();
+  }
 }
 
 function triParDistance() {
