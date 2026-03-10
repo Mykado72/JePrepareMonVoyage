@@ -14,9 +14,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/app.css"/>
-  <!-- Leaflet.js (carte OpenStreetMap) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Google Maps API -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCjzeTlbJRQIz9VQyh6FmwEqD_89TPjmqc&libraries=places,geometry&language=fr&callback=onGoogleMapsReady" async defer></script>
 </head>
 <body>
   <div id="app">
@@ -131,34 +130,20 @@
           <div class="card">
             <div class="card-header"><span class="card-icon">🏨</span><h2>Hébergement</h2></div>
 
-            <!-- Panneau recherche hébergement -->
-            <div class="maps-search-panel maps-search-panel--compact">
-              <div class="maps-search-header">
-                <span class="maps-search-icon">🔍</span>
-                <span class="maps-search-title">Rechercher un hébergement</span>
-                <span class="maps-search-dest" id="mapsHebDest"></span>
+            <!-- Carte Google Maps hébergement -->
+            <div class="embedded-map-wrap" id="hebMapWrap">
+              <div class="embedded-map-search-row">
+                <input type="text" id="hebMapSearch" placeholder="Recherchez votre hébergement (nom, adresse…)" autocomplete="off"/>
+                <button class="btn-icon" onclick="locateMeHeb()" title="Ma position">📍</button>
               </div>
-              <div class="maps-search-bar">
-                <input type="text" id="mapsHebInput" placeholder="Nom d'hôtel, quartier, type…" onkeypress="if(event.key==='Enter') openMapsHeb()"/>
-                <button class="btn-maps-search" onclick="openMapsHeb()">🔍 Rechercher</button>
-              </div>
-              <div class="maps-quick-btns">
-                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels')">🏨 Hôtels</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels boutique')">✨ Boutique</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('airbnb location vacances')">🏠 Airbnb</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('gîtes chambres hôtes')">🏡 Gîtes</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('campings')">⛺ Campings</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('auberges de jeunesse hostels')">🛏️ Auberges</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('appart hôtels résidences')">🏢 Appart-hôtels</button>
-                <button class="maps-quick-btn" onclick="openMapsHebCat('hôtels luxe 5 étoiles')">⭐ Luxe 5★</button>
-              </div>
-              <p class="maps-search-hint">💡 Après avoir trouvé votre hébergement, renseignez son nom et son adresse dans les champs ci-dessous.</p>
+              <div id="hebGoogleMap" class="embedded-map"></div>
+              <p class="map-hint" id="hebMapHint">💡 Carte disponible une fois le pays et la ville renseignés — sélectionnez un établissement pour remplir les champs automatiquement.</p>
             </div>
 
             <div class="form-grid">
               <div class="form-group">
                 <label>Type d'hébergement</label>
-                <select id="infoTypeHebergement" onchange="updateHebergementUI()">
+                <select id="infoTypeHebergement" onchange="onHebTypeChange()">
                   <option value="">-- Choisir --</option>
                   <option value="hotel">🏨 Hôtel</option>
                   <option value="gite">🏡 Gîte</option>
@@ -171,7 +156,7 @@
                 <label>Nom de l'établissement</label>
                 <input type="text" id="infoNomHebergement" placeholder="Nom de l'hôtel, du gîte…"/>
               </div>
-              <div class="form-group">
+              <div class="form-group full-width">
                 <label>Adresse complète</label>
                 <textarea id="infoAdresseHebergement" rows="2" placeholder="Adresse, code postal, ville…"></textarea>
               </div>
@@ -180,12 +165,20 @@
                 <input type="text" id="infoTelHebergement" placeholder="+34 123 456 789"/>
               </div>
               <div class="form-group">
+                <label>Site internet</label>
+                <input type="url" id="infoSiteHebergement" placeholder="https://…"/>
+              </div>
+              <div class="form-group">
                 <label>Numéro de réservation</label>
                 <input type="text" id="infoRefHebergement" placeholder="Référence de réservation"/>
               </div>
               <div class="form-group">
                 <label>Lien de réservation</label>
                 <input type="url" id="infoLienHebergement" placeholder="https://…"/>
+              </div>
+              <div class="form-group">
+                <label>Note Google</label>
+                <input type="text" id="infoRatingHebergement" placeholder="—" readonly/>
               </div>
             </div>
           </div>
@@ -493,31 +486,14 @@
           </div>
         </div>
 
-        <!-- Panneau recherche Google Maps -->
-        <div class="maps-search-panel" id="mapsSearchPanel">
-          <div class="maps-search-header">
-            <span class="maps-search-icon">🗺️</span>
-            <span class="maps-search-title">Rechercher sur Google Maps</span>
-            <span class="maps-search-dest" id="mapsSearchDest"></span>
+        <!-- Carte Google Maps intégrée dans la page -->
+        <div class="embedded-map-wrap" id="visiterMapWrap">
+          <div class="embedded-map-search-row">
+            <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu à ajouter (restaurant, monument, musée…)" autocomplete="off"/>
+            <button class="btn-icon" onclick="locateMeVisiter()" title="Ma position">📍</button>
           </div>
-          <div class="maps-search-bar">
-            <input type="text" id="mapsSearchInput" placeholder="Recherche libre : musée, plage, pharmacie…" onkeypress="if(event.key==='Enter') openMapsSearch()"/>
-            <button class="btn-maps-search" onclick="openMapsSearch()">🔍 Rechercher</button>
-          </div>
-          <div class="maps-quick-btns">
-            <button class="maps-quick-btn maps-quick-btn--hotel" onclick="openMapsHotelWithProposal()">🏨 Hôtels</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('restaurants')">🍽️ Restaurants</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('attractions touristiques')">🏛️ Monuments</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('musées')">🖼️ Musées</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('plages')">🏖️ Plages</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('bars')">🍸 Bars</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('shopping centres commerciaux')">🛍️ Shopping</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('parcs jardins')">🌿 Nature</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('pharmacies')">💊 Pharmacies</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('supermarchés')">🛒 Supermarchés</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('transports en commun')">🚌 Transports</button>
-            <button class="maps-quick-btn" onclick="openMapsCategory('locations de voitures')">🚗 Location voiture</button>
-          </div>
+          <div id="visiterGoogleMap" class="embedded-map embedded-map--tall"></div>
+          <p class="map-hint" id="visiterMapHint">💡 Sélectionnez un lieu sur la carte ou dans la liste de suggestions pour l'ajouter automatiquement à votre liste.</p>
         </div>
 
         <div class="visiter-filters">
@@ -532,27 +508,13 @@
 
         <div id="lieuxContainer"></div>
 
-        <!-- Modal Ajouter lieu -->
-        <!-- Modal Ajouter / Modifier lieu -->
+        <!-- Modal confirmation / édition lieu -->
         <div class="modal" id="modalAddLieu">
-          <div class="modal-content modal-map">
+          <div class="modal-content modal-sm">
             <div class="modal-header">
-              <h3 id="modalLieuTitle">📍 Ajouter un lieu</h3>
+              <h3 id="modalLieuTitle">📍 Ajouter ce lieu</h3>
               <button class="modal-close" onclick="closeModal('modalAddLieu')">✕</button>
             </div>
-
-            <!-- Recherche sur la carte -->
-            <div class="map-search-row">
-              <input type="text" id="mapSearchQuery" placeholder="Rechercher un lieu, une adresse…" onkeypress="if(event.key==='Enter') searchOnMap()"/>
-              <button class="btn-maps-search" onclick="searchOnMap()">🔍</button>
-            </div>
-            <div id="mapSearchResults" class="map-search-results"></div>
-
-            <!-- Carte Leaflet -->
-            <div id="leafletMap" style="height:260px;border-radius:8px;overflow:hidden;margin-bottom:14px;border:1.5px solid var(--border);"></div>
-            <p class="map-hint">💡 Cliquez sur un résultat de recherche pour le placer sur la carte — les champs se remplissent automatiquement.</p>
-
-            <!-- Champs lieu -->
             <div class="form-grid">
               <div class="form-group">
                 <label>Nom du lieu *</label>
@@ -571,17 +533,25 @@
               </div>
               <div class="form-group full-width">
                 <label>Adresse</label>
-                <input type="text" id="newLieuAdresse" placeholder="Rempli automatiquement ou saisie manuelle"/>
+                <input type="text" id="newLieuAdresse" placeholder="Remplie automatiquement"/>
               </div>
               <div class="form-group">
                 <label>Distance depuis l'hébergement</label>
-                <input type="text" id="newLieuDistance" placeholder="Calculée auto si hébergement renseigné" readonly id="newLieuDistance"/>
-                <span id="distanceCalcStatus" style="font-size:0.75rem;color:var(--text3);margin-top:4px;display:block;"></span>
+                <input type="text" id="newLieuDistance" readonly/>
               </div>
               <div class="form-group">
-                <label>Coordonnées GPS</label>
-                <input type="text" id="newLieuCoords" placeholder="lat, lon — rempli auto" readonly/>
+                <label>Note Google</label>
+                <input type="text" id="newLieuRating" readonly/>
               </div>
+              <div class="form-group">
+                <label>Téléphone</label>
+                <input type="text" id="newLieuTel" placeholder="—"/>
+              </div>
+              <div class="form-group">
+                <label>Site internet</label>
+                <input type="url" id="newLieuSite" placeholder="https://…"/>
+              </div>
+              <input type="hidden" id="newLieuCoords"/>
               <div class="form-group full-width">
                 <label>Notes / Infos pratiques</label>
                 <textarea id="newLieuNotes" rows="2" placeholder="Prix, horaires, conseils…"></textarea>
