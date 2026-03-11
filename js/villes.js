@@ -127,7 +127,6 @@ var VILLES_PAR_PAYS = {
     'Thonon-les-Bains','Évian-les-Bains','Albertville','Moûtiers','Bourg-Saint-Maurice',
     'Chamonix','Megève','Courchevel','Val d\'Isère','Tignes','Les Deux Alpes','Alpe d\'Huez',
     'Méribel','Val Thorens','Morzine','Les Gets','Flaine',
-    // Régions françaises
     'Île-de-France','Provence-Alpes-Côte d\'Azur','Occitanie','Auvergne-Rhône-Alpes',
     'Nouvelle-Aquitaine','Bretagne','Normandie','Hauts-de-France','Grand Est',
     'Pays de la Loire','Centre-Val de Loire','Bourgogne-Franche-Comté','Corse',
@@ -147,7 +146,6 @@ var VILLES_PAR_PAYS = {
     'Santa Cruz de Tenerife','Puerto de la Cruz','Los Cristianos','Playa de las Américas',
     'Maspalomas','Puerto Rico','Mogán','Arrecife','Puerto del Carmen','Costa del Silencio',
     'Ronda','Nerja','Frigiliana','Antequera','Jerez de la Frontera','El Puerto de Santa María',
-    // Régions espagnoles
     'Andalousie','Catalogne','Communauté de Madrid','Communauté valencienne',
     'Castille-et-León','Galice','Pays basque','Castille-La Manche','Aragon',
     'Murcie','Estrémadure','Asturies','Navarre','La Rioja','Cantabrie',
@@ -166,7 +164,6 @@ var VILLES_PAR_PAYS = {
     'Matera','Alberobello','Lecce','Otrante','Gallipoli','Trani',
     'Sorrente','Ischia','Procida','Pompéi','Herculanum','Caserte','Salerne',
     'Peschiera del Garda','Sirmione','Desenzano del Garda','Malcesine','Bardolino',
-    // Régions italiennes
     'Toscane','Lombardie','Sicile','Sardaigne','Vénétie','Ligurie','Piémont',
     'Campanie','Pouilles','Calabre','Émilie-Romagne','Marches','Ombrie',
     'Latium','Abruzzes','Molise','Basilicate','Vallée d\'Aoste',
@@ -180,7 +177,6 @@ var VILLES_PAR_PAYS = {
     'Beja','Portalegre','Castelo Branco','Guarda','Bragance','Vila Real','Viana do Castelo',
     'Ponte de Lima','Barcelos','Peniche','Sesimbra','Palmela',
     'Madère','Ponta Delgada','Terceira','Faial','Pico','São Jorge','Sagres','Vila do Bispo',
-    // Régions portugaises
     'Algarve','Alentejo','Minho','Douro','Trás-os-Montes','Beira Alta','Beira Baixa',
     'Beira Litoral','Ribatejo','Estremadura','Açores','Madère',
     'Serra da Estrela','Vallée du Douro','Costa Vicentina','Costa de Prata'],
@@ -192,7 +188,6 @@ var VILLES_PAR_PAYS = {
     'Milos','Sifnos','Folegandros','Ios','Amorgos','Syros','Tinos','Andros',
     'Lesbos','Chios','Samos','Ikaria','Lemnos','Thassos','Samothrace',
     'Skopelos','Alonissos','Céphalonie','Ithaque','Leucade','Paxos','Hydra','Spetses','Égine',
-    // Régions grecques
     'Crète','Péloponnèse','Macédoine','Épire','Thessalie','Thrace','Attique',
     'Cyclades','Dodécanèse','Îles Ioniennes','Îles du Nord-Est de la Mer Égée',
     'Sporades','Argolide','Laconie','Messénie','Arcadie','Élide'],
@@ -207,7 +202,6 @@ var VILLES_PAR_PAYS = {
     'Berchtesgaden','Garmisch-Partenkirchen','Füssen','Neuschwanstein',
     'Aix-la-Chapelle','Mönchengladbach','Krefeld','Leverkusen','Solingen',
     'Mainz','Darmstadt','Kassel','Paderborn',
-    // Régions allemandes (Länder)
     'Bavière','Bade-Wurtemberg','Rhénanie-du-Nord-Westphalie','Brandebourg',
     'Saxe','Thuringe','Rhénanie-Palatinat','Hesse','Schleswig-Holstein',
     'Mecklembourg-Poméranie','Saxe-Anhalt','Basse-Saxe','Sarre',
@@ -224,7 +218,6 @@ var VILLES_PAR_PAYS = {
     'Swansea','Newport','Wrexham','Bangor','Aberystwyth','St Andrews','Oban','Fort William',
     'Isle of Skye','Loch Ness','St Ives','Penzance','Newquay','Padstow','Torquay',
     'Whitby','Scarborough','Harrogate','Keswick','Ambleside','Windermere','Grasmere',
-    // Régions britanniques
     'Angleterre','Écosse','Pays de Galles','Irlande du Nord',
     'Cornouailles','Devon','Lake District','Yorkshire Dales','Peak District',
     'Cotswolds','Highlands','Îles Hébrides','Îles Orcades','Îles Shetland',
@@ -236,7 +229,6 @@ var VILLES_PAR_PAYS = {
     'Tilburg','Enschede','Apeldoorn','Arnhem','Amersfoort','Den Bosch','Venlo',
     'Alkmaar','Hoorn','Enkhuizen','Volendam','Marken','Gouda','Dordrecht',
     'Middelburg','Vlissingen','Giethoorn','Keukenhof','Kinderdijk',
-    // Régions néerlandaises
     'Hollande-du-Nord','Hollande-du-Sud','Zeélande','Utrecht','Overijssel',
     'Gueldre','Frise','Drenthe','Groningue','Noord-Brabant','Limbourg',
     'Zaanse Schans','Champs de tulipes de Keukenhof','Wadden'],
@@ -245,7 +237,6 @@ var VILLES_PAR_PAYS = {
     'Charleroi','Tournai','Hasselt','Genk','Ostende','Knokke','Dinant','Spa',
     'Durbuy','Bouillon','Han-sur-Lesse','Rochefort','Bastogne','Eupen','Verviers',
     'Aywaille','Stavelot','Vielsalm','Arlon','Virton',
-    // Régions belges
     'Flandre','Wallonie','Ardennes belges','Côte belge','Brabant',
     'Pays de Liège','Luxembourg belge','Hainaut','Namurois'],
 
@@ -256,7 +247,6 @@ var VILLES_PAR_PAYS = {
     'Schaffhouse','Winterthour','Zoug','Schwyz','Aarau','Soleure','Delémont',
     'Neuchâtel','La Chaux-de-Fonds','Fribourg','Bulle','Yverdon-les-Bains','Nyon',
     'Morges','Aigle','Martigny','Champéry','Les Diablerets',
-    // Régions suisses
     'Suisse romande','Suisse alémanique','Tessin','Grisons','Valais',
     'Oberland bernois','Jura suisse','Lac Léman','Lac de Zurich','Lac des Quatre-Cantons',
     'Appenzell','Emmental','Engadine','Val Bregaglia','Pays de Fribourg'],
@@ -266,7 +256,6 @@ var VILLES_PAR_PAYS = {
     'Kaprun','Saalbach','Bad Gastein','Baden','Eisenstadt','Krems',
     'St. Pölten','Wels','Steyr','Gmunden','Mondsee','Wolfgangsee','Attersee',
     'Schladming','Ramsau','Filzmoos','Bad Aussee','Dachstein',
-    // Régions autrichiennes
     'Tyrol','Styrie','Carinthie','Salzbourg','Haute-Autriche','Basse-Autriche',
     'Burgenland','Vorarlberg','Salzkammergut','Zillertal','Ötztal','Stubaital',
     'Wachau','Kamptal','Bregenzerwald','Montafon'],
@@ -277,7 +266,6 @@ var VILLES_PAR_PAYS = {
     'Errachidia','Zagora','Tinghir','Midelt','Azrou','Khénifra','Khouribga',
     'Nador','Al Hoceima','Larache','Asilah','Moulay Idriss','Volubilis',
     'Aït Benhaddou','Skoura','El Kelâa des Mgouna','Boumalne Dadès',
-    // Régions marocaines
     'Marrakech-Safi','Fès-Meknès','Rabat-Salé-Kénitra','Casablanca-Settat',
     'Tanger-Tétouan-Al Hoceïma','Oriental','Béni Mellal-Khénifra',
     'Drâa-Tafilalet','Souss-Massa','Guelmim-Oued Noun',
@@ -287,7 +275,6 @@ var VILLES_PAR_PAYS = {
   'tunisie': ['Tunis','Sfax','Sousse','Monastir','Kairouan','Bizerte','Gabès','Djerba',
     'Hammamet','Nabeul','Mahdia','Tabarka','Ain Draham','Douz','Tozeur','Nefta',
     'Matmata','Kébili','Gafsa','Kasserine','Sidi Bouzid','Jendouba','Kef','Tataouine',
-    // Régions tunisiennes
     'Cap Bon','Sahel tunisien','Tunisie du Sud','Djebel Chambi',
     'Île de Djerba','Île de Kerkennah','Golfe de Hammamet','Golfe de Gabès'],
 
@@ -306,7 +293,6 @@ var VILLES_PAR_PAYS = {
     'Kayseri','Nevşehir','Uçhisar','Ürgüp','Avanos','Zelve','Derinkuyu',
     'Side','Aspendos','Perge','Termessos','Olympos','Phaselis','Çıralı','Adrasan',
     'Kemer','Belek','Lara','Mahmutlar','Okurcalar','Konakli','Kalkan','Patara',
-    // Régions turques
     'Côte égéenne','Côte méditerranéenne (Riviera turque)','Côte de la mer Noire',
     'Cappadoce (région)','Anatolie centrale','Anatolie orientale','Anatolie du Sud-Est',
     'Péninsule de Bodrum','Péninsule de Datça','Baie de Göcek','Côte lycienne','Marmara'],
@@ -336,7 +322,6 @@ var VILLES_PAR_PAYS = {
     'Fredericton','Moncton','Saint John','Charlottetown','St. John\'s',
     'Niagara Falls','Kelowna','Kamloops','Prince George','Whitehorse','Yellowknife',
     'Iqaluit','Canmore','Lake Louise','Tofino','Ucluelet',
-    // Régions canadiennes
     'Ontario','Québec (province)','Colombie-Britannique','Alberta','Prairies canadiennes',
     'Maritimes','Terre-Neuve','Yukon','Territoires du Nord-Ouest','Nunavut',
     'Rocheuses canadiennes','Île de Vancouver'],
@@ -349,7 +334,6 @@ var VILLES_PAR_PAYS = {
     'Kumamoto','Oita','Beppu','Miyazaki','Kagoshima','Yakushima',
     'Naha','Ishigaki','Miyako','Fujikawaguchiko','Karuizawa','Nozawa Onsen',
     'Kusatsu','Hakuba','Niseko','Rusutsu',
-    // Régions japonaises
     'Hokkaido','Tohoku','Kanto','Chubu','Kansai','Chugoku','Shikoku','Kyushu',
     'Okinawa (archipel)','Alpes japonaises','Région du Mont Fuji'],
 
@@ -359,7 +343,6 @@ var VILLES_PAR_PAYS = {
     'Ao Nang','Trang','Hat Yai','Chumphon','Surat Thani','Phetchaburi','Prachuap',
     'Udon Thani','Khon Kaen','Ubon Ratchathani','Korat','Mae Hong Son','Lampang',
     'Phitsanulok','Mae Sai','Chiang Saen','Mukdahan',
-    // Régions thaïlandaises
     'Thaïlande du Nord','Thaïlande du Sud','Golfe de Thaïlande','Mer d\'Andaman',
     'Triangle d\'or','Côte Ouest (Andaman)','Côte Est (Golfe)'],
 
@@ -367,7 +350,6 @@ var VILLES_PAR_PAYS = {
     'Sapa','Mũi Né','Phú Quốc','Dalat','Can Tho','Vũng Tàu','Phan Thiet','Quy Nhon',
     'Pleiku','Buon Ma Thuot','Kon Tum','Hà Giang','Cao Bằng','Lạng Sơn','Điện Biên Phủ',
     'Tam Coc','Ninh Binh','Haiphong','Vinh','Dong Ha','Ha Giang',
-    // Régions vietnamiennes
     'Vietnam du Nord','Vietnam central','Vietnam du Sud',
     'Delta du Mékong','Baie d\'Halong (région)','Hauts plateaux du centre'],
 
@@ -377,7 +359,6 @@ var VILLES_PAR_PAYS = {
     'Seminyak','Kuta','Legian','Canggu','Sanur','Nusa Dua','Jimbaran','Uluwatu',
     'Lovina','Amed','Candidasa','Padangbai','Nusa Penida','Nusa Lembongan',
     'Sumbawa','Sumba','Ende','Maumere','Larantuka',
-    // Régions indonésiennes
     'Bali (île)','Java','Sumatra','Kalimantan','Sulawesi','Papouasie occidentale',
     'Petites Îles de la Sonde','Moluques','Îles Gili'],
 
@@ -390,7 +371,6 @@ var VILLES_PAR_PAYS = {
     'Leh','Ladakh','Srinagar','Gulmarg','Pahalgam','Manali','Shimla',
     'Mussoorie','Nainital','Jim Corbett','Ranthambore','Bharatpur','Ajmer','Pushkar',
     'Jaisalmer','Bikaner','Bundi','Chittorgarh','Ranakpur',
-    // Régions indiennes
     'Rajasthan','Kerala','Goa','Himalaya indien','Tamil Nadu','Bengale-Occidental',
     'Karnataka','Maharashtra','Gujarat','Uttarakhand','Himachal Pradesh',
     'Triangle d\'or (Inde)','Côte de Malabar','Côte de Coromandel'],
@@ -422,7 +402,6 @@ var VILLES_PAR_PAYS = {
     'Curitiba','Goiânia','Vitória','Campinas','Santos','Búzios','Paraty','Angra dos Reis',
     'Ilhéus','Porto Seguro','Trancoso','Caraíva','Morro de São Paulo',
     'Fernando de Noronha','Lençóis Maranhenses','Chapada Diamantina','Bonito',
-    // Régions brésiliennes
     'Amazonie','Nord-Est brésilien','Sud du Brésil','Pantanal',
     'État de Rio de Janeiro','État de São Paulo','Bahia','Minas Gerais',
     'Rio Grande do Sul','Mato Grosso','Pará','Ceará'],
@@ -435,7 +414,6 @@ var VILLES_PAR_PAYS = {
     'Cabo San Lucas','Ensenada','Tijuana','Acapulco','Zihuatanejo',
     'Huatulco','Puerto Escondido','Manzanillo','Holbox','Cozumel','Isla Mujeres',
     'Bacalar','Valladolid','Uxmal','Campeche',
-    // Régions mexicaines
     'Riviera Maya','Yucatan','Baja California','Oaxaca (région)','Chiapas',
     'Jalisco','Guanajuato (région)','Veracruz (région)','Sonora',
     'Côte Pacifique mexicaine','Côte du Golfe'],
@@ -445,7 +423,6 @@ var VILLES_PAR_PAYS = {
     'Mar del Plata','Neuquén','Santa Fe','La Plata','San Juan','San Luis','Río Gallegos',
     'Puerto Iguazú','Puerto Madryn','Trelew','Comodoro Rivadavia','Tierra de Feu',
     'Mendoza','Tilcara','Humahuaca','Purmamarca',
-    // Régions argentines
     'Patagonie','Puna','Nord-Ouest argentin','Cuyo','Pampas',
     'Côte atlantique argentine','Terre de Feu','Lac Nahuel Huapi','Lac Perito Moreno'],
 
