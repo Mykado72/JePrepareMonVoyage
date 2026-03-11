@@ -1459,14 +1459,14 @@ function _showVisiterSearchMarkers(latLng, directPlace) {
   if (currentLieuFilter === 'plage') {
     // Google Places a "beach" dans les noms mais rarement en type
     // On cherche avec keyword en anglais ET français
-    searchParams.keyword = 'plage beach balnéaire littoral';
+    searchParams.keyword = 'plage beach';
   } else if (currentLieuFilter === 'shopping') {
     // type 'shopping_mall' est fiable pour les centres commerciaux
     searchParams.type = 'shopping_mall';
   } else if (currentLieuFilter === 'restaurant') {
     searchParams.type = 'restaurant';
   } else if (currentLieuFilter === 'monument') {
-    searchParams.keyword = 'monument tourist attraction musée église cathédrale site historique';
+    searchParams.keyword = 'monument tourist église cathédrale historique';
   }
   // filtre 'tous' → pas de keyword ni type
 
