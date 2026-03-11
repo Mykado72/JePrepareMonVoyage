@@ -982,6 +982,12 @@ function initHebMap() {
       zoom = 15;
     }
 
+    // Pré-remplir le champ de recherche avec la ville/région saisie (TOUJOURS, carte existante ou non)
+    var cityVal = (document.getElementById('infoVille') || {}).value
+      || (currentTrip() && currentTrip().infos && currentTrip().infos.infoVille) || '';
+    var searchEl = document.getElementById('hebMapSearch');
+    if (searchEl && cityVal && !searchEl.value) searchEl.value = cityVal;
+
     // Si carte déjà initialisée → juste recentrer
     if (_hebMap) {
       _hebMap.setCenter(center);
@@ -1029,12 +1035,6 @@ function initHebMap() {
       });
     });
 
-    // Pré-remplir le champ de recherche hébergement avec la ville actuelle
-    var cityVal = (document.getElementById('infoVille') || {}).value
-      || (currentTrip() && currentTrip().infos && currentTrip().infos.infoVille) || '';
-    var searchEl = document.getElementById('hebMapSearch');
-    if (searchEl && cityVal && !searchEl.value) searchEl.value = cityVal;
-
     // Clic simple → marqueurs jaunes à proximité
     _hebMap.addListener('click', function(e) {
       showNearbyHebMarkers(e.latLng);
@@ -1054,6 +1054,11 @@ function refreshHebMap() {
   if (!_googleMapsReady || !window.google) return;
   var dest = getMapsDestination();
   if (!dest) return;
+  // Forcer la mise à jour du champ de recherche
+  var cityVal = (document.getElementById('infoVille') || {}).value
+    || (currentTrip() && currentTrip().infos && currentTrip().infos.infoVille) || '';
+  var searchEl = document.getElementById('hebMapSearch');
+  if (searchEl && cityVal) searchEl.value = cityVal;
   initHebMap();
 }
 
@@ -1147,29 +1152,37 @@ function showNearbyHebMarkers(latLng) {
   if (!_hebMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_hebMap);
 
-  // Keyword selon le type d'hébergement sélectionné
   var sel = document.getElementById('infoTypeHebergement');
   var val = sel ? sel.value : '';
-  var keyword = val === 'camping' ? 'camping' : 'hotel';
+  var searchParams = { location: latLng, radius: 20000, language: 'fr' };
 
-  service.nearbySearch({
-    location: latLng, radius: 1000,
-    keyword: keyword, language: 'fr'
-  }, function(results, status) {
-    // Effacer anciens marqueurs
+  // Utiliser keyword (plus fiable que type avec nearbySearch)
+  if (val === 'camping') {
+    searchParams.keyword = 'camping';
+  } else if (val === 'airbnb') {
+    searchParams.keyword = 'airbnb location appartement vacances';
+  } else if (val === 'gite') {
+    searchParams.keyword = 'gite chambres hotes bed breakfast';
+  } else if (val === 'hotel') {
+    searchParams.keyword = 'hotel';
+  } else {
+    searchParams.keyword = 'hotel lodging hébergement';
+  }
+
+  service.nearbySearch(searchParams, function(results, status) {
     _hebSearchMarkers.forEach(function(m) { m.setMap(null); });
     _hebSearchMarkers = [];
     if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
-    // Si aucun résultat avec keyword, tenter sans filtre
+
     if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) {
-      service.nearbySearch({ location: latLng, radius: 1000, language: 'fr' }, function(r2, s2) {
+      // Fallback : recherche générique lodging
+      service.nearbySearch({ location: latLng, radius: 20000, keyword: 'hotel', language: 'fr' }, function(r2, s2) {
         if (s2 === google.maps.places.PlacesServiceStatus.OK && r2.length) {
           r2.slice(0, 15).forEach(function(place, idx) { _placeHebMarker(place, idx); });
         }
       });
       return;
     }
-
     results.slice(0, 15).forEach(function(place, idx) { _placeHebMarker(place, idx); });
   });
 }
@@ -1375,21 +1388,24 @@ function _showVisiterSearchMarkers(latLng, directPlace) {
     return;
   }
 
-  // Recherche à proximité selon filtre actif
-  var catKeywords = {
-    monument:   'tourist attraction monument site',
-    restaurant: 'restaurant',
-    plage:      'beach plage',
-    shopping:   'shopping mall store'
+  // Recherche à proximité selon filtre actif — type Google Places + keyword
+  var filterConfig = {
+    monument:   { keyword: 'monument tourist attraction site', type: 'tourist_attraction' },
+    restaurant: { keyword: 'restaurant',                       type: 'restaurant' },
+    plage:      { keyword: 'beach plage',                      type: 'natural_feature' },
+    shopping:   { keyword: 'shopping mall magasin',            type: 'shopping_mall' }
   };
-  var keyword = catKeywords[currentLieuFilter];
-  var searchParams = { location: latLng, radius: 800, language: 'fr' };
-  if (keyword) searchParams.keyword = keyword;
+  var cfg = filterConfig[currentLieuFilter];
+  var searchParams = { location: latLng, radius: 20000, language: 'fr' };
+  if (cfg) {
+    searchParams.keyword = cfg.keyword;
+    // On n'ajoute pas type ici car l'API accepte keyword OU type, pas les deux bien
+  }
 
   service.nearbySearch(searchParams, function(results, status) {
     if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) {
       // Fallback sans filtre
-      service.nearbySearch({ location: latLng, radius: 800, language: 'fr' }, function(r2, s2) {
+      service.nearbySearch({ location: latLng, radius: 20000, language: 'fr' }, function(r2, s2) {
         if (s2 === google.maps.places.PlacesServiceStatus.OK && r2.length) {
           r2.slice(0, 15).forEach(function(p, i) { _placeVisiterSearchMarker(p, i); });
         }
@@ -1456,7 +1472,9 @@ function _openLieuModalFromPlace(place) {
     ? '⭐ ' + place.rating + '/5' + (place.user_ratings_total ? ' (' + place.user_ratings_total + ' avis)' : '')
     : '';
   var dist = _computeDist(lat, lng);
-  var cat  = guessCategoryFromGoogleTypes(place.types || []) || 'autre';
+  var cat = (currentLieuFilter && currentLieuFilter !== 'tous')
+    ? currentLieuFilter
+    : (guessCategoryFromGoogleTypes(place.types || []) || 'monument');
 
   document.getElementById('newLieuNom').value       = place.name || '';
   document.getElementById('newLieuAdresse').value   = place.formatted_address || '';
@@ -1630,10 +1648,6 @@ function goSearchHotelsAndFill() { closeModal('modalHotelProposal'); openMapsHeb
 function goToHebergement() { closeModal('modalHotelProposal'); navigate('infos'); }
 
 // ── À VISITER ──────────────────────────────────────────────
-var CAT_ICONS  = { monument:'🏛️', restaurant:'🍽️', plage:'🏖️', shopping:'🛍️' };
-var CAT_LABELS = { monument:'Monument', restaurant:'Restaurant', plage:'Plage', shopping:'Shopping' };
-var currentLieuFilter = 'tous';
-
 function renderLieux() {
   var trip = currentTrip();
   var container = document.getElementById('lieuxContainer');
@@ -1694,10 +1708,10 @@ function filterLieux(filter, btn) {
   document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   renderLieux();
-  // Forcer le rafraîchissement des marqueurs même si la carte existe déjà
   if (_visiterMap) {
-    google.maps.event.trigger(_visiterMap, 'resize');
     _renderVisiterMarkers();
+    // Relancer la recherche de marqueurs jaunes avec le nouveau filtre
+    _showVisiterSearchMarkers(_visiterMap.getCenter(), null);
   }
 }
 
