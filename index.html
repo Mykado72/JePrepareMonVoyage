@@ -191,6 +191,7 @@
                   <option value="autre">🛖 Autre</option>
                   <optgroup label="─────────────────"></optgroup>
                   <option value="aeroport">✈️ Aéroport d'arrivée</option>
+                  <option value="gare">🚄 Gare d'arrivée</option>
                   <option value="loueur">🚗 Loueur de véhicule</option>
                 </select>
               </div>
@@ -239,8 +240,19 @@
         </div>
         <div class="cards-grid">
 
+          <!-- Bannière "propres moyens" — affichée quand aucun transport sélectionné -->
+          <div class="card" id="transportPropresMoyens" style="display:none">
+            <div class="card-header"><span class="card-icon">🚗</span><h2>Trajets par mes propres moyens</h2></div>
+            <p style="color:var(--text-secondary);margin:0 0 8px;font-size:14px">
+              Aucun aéroport ni gare sélectionné — vous voyagez par vos propres moyens (voiture, covoiturage…).
+            </p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0">
+              Pour activer les sections Transport aller/retour, Parking &amp; Transfert et Bagages, sélectionnez un <b>✈️ Aéroport d'arrivée</b> ou une <b>🚄 Gare d'arrivée</b> dans la carte de la rubrique <b>Infos voyage</b>.
+            </p>
+          </div>
+
           <!-- Transport Aller -->
-          <div class="card">
+          <div class="card" id="cardTransportAller">
             <div class="card-header"><span class="card-icon">🛫</span><h2>Transport aller</h2></div>
             <div class="form-grid">
               <div class="form-group">
@@ -294,7 +306,7 @@
           </div>
 
           <!-- Transport Retour -->
-          <div class="card">
+          <div class="card" id="cardTransportRetour">
             <div class="card-header"><span class="card-icon">🛬</span><h2>Transport retour</h2></div>
             <div class="form-grid">
               <div class="form-group">
@@ -348,7 +360,7 @@
           </div>
 
           <!-- Parking & Transfert -->
-          <div class="card">
+          <div class="card" id="cardParking">
             <div class="card-header"><span class="card-icon">🅿️</span><h2>Parking &amp; Transfert</h2></div>
             <div class="form-grid">
               <div class="form-group">
@@ -376,7 +388,7 @@
           </div>
 
           <!-- Bagages -->
-          <div class="card">
+          <div class="card" id="cardBagagesAutoris">
             <div class="card-header"><span class="card-icon">🧳</span><h2>Bagages autorisés</h2></div>
             <div class="form-grid">
               <div class="form-group">
@@ -418,8 +430,19 @@
         </div>
         <div class="cards-grid">
 
+          <!-- Bannière "propres moyens" déplacements -->
+          <div class="card" id="deplPropresMoyens" style="display:none">
+            <div class="card-header"><span class="card-icon">🚶</span><h2>Trajets par mes propres moyens</h2></div>
+            <p style="color:var(--text-secondary);margin:0 0 8px;font-size:14px">
+              Aucune location de véhicule ni loueur sélectionné.
+            </p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0">
+              Pour activer la carte des loueurs et la section Location véhicule, sélectionnez un <b>🚗 Loueur de véhicule</b> dans la carte de la rubrique <b>Infos voyage</b>, ou choisissez manuellement la location ci-dessous.
+            </p>
+          </div>
+
           <!-- Carte loueurs de véhicules -->
-          <div class="card">
+          <div class="card" id="cardDeplMap">
             <div class="card-header"><span class="card-icon">🗺️</span><h2>Trouver un loueur sur la carte</h2></div>
             <div class="embedded-map-wrap" id="deplMapWrap">
               <div class="embedded-map-search-row">
@@ -432,7 +455,7 @@
           </div>
 
           <!-- Location véhicule -->
-          <div class="card">
+          <div class="card" id="cardLocationVehicule">
             <div class="card-header"><span class="card-icon">🚗</span><h2>Location véhicule</h2></div>
             <div class="form-grid">
               <div class="form-group">
