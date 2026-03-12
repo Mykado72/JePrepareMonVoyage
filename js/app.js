@@ -183,6 +183,13 @@ var PAGE_TITLES = {
 };
 
 function navigate(page) {
+  // Sauvegarde automatique de la rubrique courante avant de changer de page
+  var currentPage = state.currentPage;
+  if (currentPage && currentPage !== page) {
+    var hasInfoField = INFO_FIELDS.some(function(id) { return !!document.getElementById(id); });
+    if (hasInfoField) _saveInfosSilent();
+  }
+
   state.currentPage = page;
   document.querySelectorAll('.page').forEach(function(p) {
     p.style.display = (p.id === 'page-' + page) ? 'block' : 'none';
@@ -223,6 +230,8 @@ function navigate(page) {
   }
   else if (page === 'transports' || page === 'deplacements') {
     loadCurrentTrip();
+    updateTransportUI();
+    updateDeplUI();
     if (page === 'deplacements') {
       setTimeout(function() { if (!_deplMap) initDeplMap(); else google.maps.event.trigger(_deplMap, 'resize'); }, 100);
     }
@@ -303,6 +312,64 @@ function saveInfos() {
   }
 }
 
+// Sauvegarde silencieuse (sans toast) — appelée au changement de rubrique
+function _saveInfosSilent() {
+  var trip = currentTrip();
+  if (!trip) return;
+  INFO_FIELDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) trip.infos[id] = el.value;
+  });
+  save();
+  updateBadges();
+}
+
+// ── AFFICHAGE CONDITIONNEL TRANSPORTS ─────────────────────────
+// Affiche/cache les sections Transport selon si aéroport ou gare choisi
+function updateTransportUI() {
+  var trip = currentTrip();
+  var mode = trip && trip.infos && trip.infos._modeArrivee; // 'aeroport' | 'gare' | undefined
+
+  var cards  = ['cardTransportAller','cardTransportRetour','cardParking','cardBagagesAutoris'];
+  var banner = document.getElementById('transportPropresMoyens');
+
+  if (mode === 'aeroport' || mode === 'gare') {
+    cards.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+    if (banner) banner.style.display = 'none';
+  } else {
+    cards.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    if (banner) banner.style.display = '';
+  }
+}
+
+// ── AFFICHAGE CONDITIONNEL DÉPLACEMENTS ───────────────────────
+// Affiche/cache les sections Location selon si loueur ou location choisie
+function updateDeplUI() {
+  var trip = currentTrip();
+  var hasLocation = trip && trip.infos &&
+    (trip.infos.infoLocationVoiture === 'oui' || trip.infos._modeArrivee === 'loueur');
+
+  var cardMap    = document.getElementById('cardDeplMap');
+  var cardLoc    = document.getElementById('cardLocationVehicule');
+  var banner     = document.getElementById('deplPropresMoyens');
+
+  if (hasLocation) {
+    if (cardMap) cardMap.style.display = '';
+    if (cardLoc) cardLoc.style.display = '';
+    if (banner)  banner.style.display  = 'none';
+  } else {
+    if (cardMap) cardMap.style.display = 'none';
+    if (cardLoc) cardLoc.style.display = 'none';
+    if (banner)  banner.style.display  = '';
+  }
+}
+
 // Pré-remplir datetime-local de départ/retour quand les dates du voyage changent
 function prefillTransportDates() {
   var d1 = document.getElementById('infoDateDepart') ? document.getElementById('infoDateDepart').value : '';
@@ -337,6 +404,8 @@ function loadCurrentTrip() {
   if (hdAller && !hdAller.value && d1) hdAller.value = d1 + 'T08:00';
   if (hdRetour && !hdRetour.value && d2) hdRetour.value = d2 + 'T14:00';
   updateBadges();
+  updateTransportUI();
+  updateDeplUI();
   var p = state.currentPage;
   if (p === 'checklist') refreshChecklist();
   else if (p === 'bagages') renderBagages();
@@ -1704,6 +1773,27 @@ function _showNearbyHebMarkers(latLng) {
     return;
   }
 
+  if (val === 'gare') {
+    // Mode gare d'arrivée
+    service.nearbySearch({ location: latLng, radius: 100000,
+      type: 'train_station', language: 'fr' },
+      function(results, status) {
+        _clearHebSearchMarkers();
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) {
+          // Fallback transit_station (inclut RER, métro, etc.)
+          service.nearbySearch({ location: latLng, radius: 100000,
+            type: 'transit_station', keyword: 'gare SNCF train', language: 'fr' },
+            function(r2, s2) {
+              if (s2 === google.maps.places.PlacesServiceStatus.OK)
+                r2.slice(0, 15).forEach(function(p, i) { _placeHebSearchMarker(p, i); });
+            });
+          return;
+        }
+        results.slice(0, 15).forEach(function(p, i) { _placeHebSearchMarker(p, i); });
+      });
+    return;
+  }
+
   var keyword = val === 'camping' ? 'camping'
               : val === 'airbnb'  ? 'location vacances appartement'
               : val === 'gite'    ? 'gite chambre hotes bed breakfast'
@@ -1740,8 +1830,9 @@ function _placeHebSearchMarker(place, idx) {
     : '';
 
   var val = (document.getElementById('infoTypeHebergement') || {}).value || '';
-  var isLoueur  = val === 'loueur';
+  var isLoueur   = val === 'loueur';
   var isAeroport = val === 'aeroport';
+  var isGare     = val === 'gare';
 
   var marker = new google.maps.Marker({
     map: _hebMap, position: pos, title: place.name,
@@ -1749,11 +1840,13 @@ function _placeHebSearchMarker(place, idx) {
     animation: idx < 3 ? google.maps.Animation.DROP : null
   });
 
-  var btnLabel  = isLoueur  ? '🚗 Choisir ce loueur'
+  var btnLabel  = isLoueur   ? '🚗 Choisir ce loueur'
                 : isAeroport ? '✈️ Choisir cet aéroport'
+                : isGare     ? '🚄 Choisir cette gare'
                 : '🏨 Choisir cet hébergement';
-  var btnAction = isLoueur  ? 'selectLoueurFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(mapsUrl) + '\')'
+  var btnAction = isLoueur   ? 'selectLoueurFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(mapsUrl) + '\')'
                 : isAeroport ? 'selectAeroportFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(place.name) + '\',\'' + encodeURIComponent(place.vicinity || place.formatted_address || '') + '\')'
+                : isGare     ? 'selectGareFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(place.name) + '\',\'' + encodeURIComponent(place.vicinity || place.formatted_address || '') + '\')'
                 : 'selectHebPlace(\'' + place.place_id + '\')';
 
   var iw = new google.maps.InfoWindow({
@@ -1814,9 +1907,21 @@ function selectLoueurFromHebMap(placeId, encodedMapsUrl) {
     if (mapsEl) mapsEl.value = mapsUrl;
     if (locEl)  locEl.value  = 'oui';
 
+    // Stocker le mode dans le trip
+    var trip = currentTrip();
+    if (trip) {
+      trip.infos._modeArrivee = 'loueur';
+      INFO_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) trip.infos[id] = el.value;
+      });
+      save();
+    }
+
     _clearHebSearchMarkers();
     if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
 
+    updateDeplUI();
     toast('🚗 Loueur sélectionné : ' + nom + ' — voir page Déplacements', 'success');
     // Proposer de naviguer vers la page Déplacements
     setTimeout(function() {
@@ -1830,10 +1935,9 @@ function selectAeroportFromHebMap(placeId, encodedName, encodedAddr) {
   if (!_hebMap || !window.google) return;
   new google.maps.places.PlacesService(_hebMap).getDetails({
     placeId: placeId, language: 'fr',
-    fields: ['name','formatted_address','geometry','place_id','iata_code']
+    fields: ['name','formatted_address','geometry','place_id']
   }, function(place, st) {
     var nom    = (st === google.maps.places.PlacesServiceStatus.OK && place) ? place.name : decodeURIComponent(encodedName);
-    var adresse = (st === google.maps.places.PlacesServiceStatus.OK && place) ? (place.formatted_address || '') : decodeURIComponent(encodedAddr);
     var lat = place && place.geometry ? place.geometry.location.lat() : null;
     var lng = place && place.geometry ? place.geometry.location.lng() : null;
 
@@ -1843,60 +1947,143 @@ function selectAeroportFromHebMap(placeId, encodedName, encodedAddr) {
     if (arrEl)  arrEl.value  = nom;
     if (depRet) depRet.value = nom;
 
-    // Stocker les coords de l'aéroport dans le trip
+    // Type de transport → Avion
+    var transAllerEl  = document.getElementById('infoTransportAller');
+    var transRetourEl = document.getElementById('infoTransportRetour');
+    if (transAllerEl)  transAllerEl.value  = 'avion';
+    if (transRetourEl) transRetourEl.value = 'avion';
+
+    // Pré-remplir les dates des vols avec les dates du séjour
     var trip = currentTrip();
-    if (trip && lat && lng) {
-      trip.infos._aeroLat = lat;
-      trip.infos._aeroLon = lng;
-      trip.infos._aeroNom = nom;
+    var d1 = trip && trip.infos && trip.infos.infoDateDepart  ? trip.infos.infoDateDepart  : '';
+    var d2 = trip && trip.infos && trip.infos.infoDateRetour  ? trip.infos.infoDateRetour  : '';
+    var hdAller  = document.getElementById('infoHeureDepart');
+    var hdRetour = document.getElementById('infoHeureDepartRetour');
+    if (hdAller  && d1) hdAller.value  = d1 + 'T08:00';
+    if (hdRetour && d2) hdRetour.value = d2 + 'T14:00';
+
+    // Stocker les coords + mode dans le trip
+    if (trip) {
+      if (lat && lng) { trip.infos._aeroLat = lat; trip.infos._aeroLon = lng; }
+      trip.infos._aeroNom      = nom;
+      trip.infos._modeArrivee  = 'aeroport';
+      // Sauvegarder aussi les champs DOM déjà remplis
+      INFO_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) trip.infos[id] = el.value;
+      });
       save();
     }
 
     _clearHebSearchMarkers();
     if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
 
-    // Rafraîchir les marqueurs aéroport sur les autres cartes
+    // Rafraîchir marqueurs et UI conditionnelle
     _renderAeroMarkerOnVisiter();
     _renderAeroMarkerOnDepl();
+    updateTransportUI();
 
-    toast('✈️ Aéroport enregistré : ' + nom, 'success');
+    toast('✈️ Aéroport enregistré : ' + nom + ' — transport aller/retour mis à jour', 'success');
   });
 }
 
-// Affiche le marqueur bleu de l'aéroport sur la carte À visiter
+// Affiche le marqueur bleu de l'aéroport/gare sur la carte À visiter
 function _renderAeroMarkerOnVisiter() {
   if (!_visiterMap) return;
   if (_visiterAeroMarker) { _visiterAeroMarker.setMap(null); _visiterAeroMarker = null; }
   var trip = currentTrip();
   if (!trip || !trip.infos || !trip.infos._aeroLat) return;
-  var pos = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  var pos  = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  var nom  = trip.infos._aeroNom || 'Arrivée';
+  var mode = trip.infos._modeArrivee || 'aeroport';
+  var icon = mode === 'gare' ? '🚄' : '✈️';
+  var label = mode === 'gare' ? 'Gare d\'arrivée' : 'Aéroport d\'arrivée';
   _visiterAeroMarker = new google.maps.Marker({
     map: _visiterMap, position: pos, zIndex: 19,
-    title: trip.infos._aeroNom || 'Aéroport',
+    title: nom,
     icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
   });
   var iw = new google.maps.InfoWindow({
-    content: '<div style="color:#111;font-size:13px"><b>✈️ ' + escHtml(trip.infos._aeroNom || 'Aéroport') + '</b><br><span style="color:#555">Aéroport d\'arrivée</span></div>'
+    content: '<div style="color:#111;font-size:13px"><b>' + icon + ' ' + escHtml(nom) + '</b><br><span style="color:#555">' + label + '</span></div>'
   });
   _visiterAeroMarker.addListener('click', function() { iw.open(_visiterMap, _visiterAeroMarker); });
 }
 
-// Affiche le marqueur bleu de l'aéroport sur la carte Déplacements
+// Affiche le marqueur bleu de l'aéroport/gare sur la carte Déplacements
 function _renderAeroMarkerOnDepl() {
   if (!_deplMap) return;
   if (_deplAeroMarker) { _deplAeroMarker.setMap(null); _deplAeroMarker = null; }
   var trip = currentTrip();
   if (!trip || !trip.infos || !trip.infos._aeroLat) return;
-  var pos = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  var pos  = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  var nom  = trip.infos._aeroNom || 'Arrivée';
+  var mode = trip.infos._modeArrivee || 'aeroport';
+  var icon = mode === 'gare' ? '🚄' : '✈️';
+  var label = mode === 'gare' ? 'Gare d\'arrivée' : 'Aéroport d\'arrivée';
   _deplAeroMarker = new google.maps.Marker({
     map: _deplMap, position: pos, zIndex: 98,
-    title: trip.infos._aeroNom || 'Aéroport',
+    title: nom,
     icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
   });
   var iw = new google.maps.InfoWindow({
-    content: '<div style="color:#111;font-size:13px"><b>✈️ ' + escHtml(trip.infos._aeroNom || 'Aéroport') + '</b><br><span style="color:#555">Aéroport d\'arrivée</span></div>'
+    content: '<div style="color:#111;font-size:13px"><b>' + icon + ' ' + escHtml(nom) + '</b><br><span style="color:#555">' + label + '</span></div>'
   });
   _deplAeroMarker.addListener('click', function() { iw.open(_deplMap, _deplAeroMarker); });
+}
+
+// Sélectionne une gare → remplit gare arrivée aller + départ retour + transport Train
+function selectGareFromHebMap(placeId, encodedName, encodedAddr) {
+  if (!_hebMap || !window.google) return;
+  new google.maps.places.PlacesService(_hebMap).getDetails({
+    placeId: placeId, language: 'fr',
+    fields: ['name','formatted_address','geometry','place_id']
+  }, function(place, st) {
+    var nom = (st === google.maps.places.PlacesServiceStatus.OK && place) ? place.name : decodeURIComponent(encodedName);
+    var lat = place && place.geometry ? place.geometry.location.lat() : null;
+    var lng = place && place.geometry ? place.geometry.location.lng() : null;
+
+    // Remplir aéroport/gare arrivée aller ET départ retour
+    var arrEl  = document.getElementById('infoAeroportArrivee');
+    var depRet = document.getElementById('infoAeroportRetourDepart');
+    if (arrEl)  arrEl.value  = nom;
+    if (depRet) depRet.value = nom;
+
+    // Type de transport → Train
+    var transAllerEl  = document.getElementById('infoTransportAller');
+    var transRetourEl = document.getElementById('infoTransportRetour');
+    if (transAllerEl)  transAllerEl.value  = 'train';
+    if (transRetourEl) transRetourEl.value = 'train';
+
+    // Pré-remplir les dates des trajets avec les dates du séjour
+    var trip = currentTrip();
+    var d1 = trip && trip.infos && trip.infos.infoDateDepart ? trip.infos.infoDateDepart : '';
+    var d2 = trip && trip.infos && trip.infos.infoDateRetour ? trip.infos.infoDateRetour : '';
+    var hdAller  = document.getElementById('infoHeureDepart');
+    var hdRetour = document.getElementById('infoHeureDepartRetour');
+    if (hdAller  && d1) hdAller.value  = d1 + 'T08:00';
+    if (hdRetour && d2) hdRetour.value = d2 + 'T14:00';
+
+    // Stocker les coords + mode dans le trip
+    if (trip) {
+      if (lat && lng) { trip.infos._aeroLat = lat; trip.infos._aeroLon = lng; }
+      trip.infos._aeroNom     = nom;
+      trip.infos._modeArrivee = 'gare';
+      INFO_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) trip.infos[id] = el.value;
+      });
+      save();
+    }
+
+    _clearHebSearchMarkers();
+    if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
+
+    _renderAeroMarkerOnVisiter();
+    _renderAeroMarkerOnDepl();
+    updateTransportUI();
+
+    toast('🚄 Gare enregistrée : ' + nom + ' — transport aller/retour mis à jour', 'success');
+  });
 }
 
 // Remplit tous les champs hébergement + met à jour le marqueur vert + recalcule distances
@@ -1979,6 +2166,8 @@ function onHebTypeChange() {
     if (hint) hint.textContent = '🚗 Mode loueur · Cliquez sur la carte pour afficher les loueurs 🟡 — sélectionnez-en un pour remplir la page Déplacements.';
   } else if (val === 'aeroport') {
     if (hint) hint.textContent = '✈️ Mode aéroport · Les aéroports 🟡 s\'affichent — sélectionnez-en un pour remplir automatiquement l\'aéroport d\'arrivée (aller) et de départ (retour).';
+  } else if (val === 'gare') {
+    if (hint) hint.textContent = '🚄 Mode gare · Les gares 🟡 s\'affichent — sélectionnez-en une pour remplir automatiquement la gare d\'arrivée (aller) et de départ (retour).';
   } else {
     if (hint) hint.textContent = '💡 🟢 = hébergement enregistré · Cliquez sur la carte pour afficher les hébergements 🟡 à proximité.';
   }
