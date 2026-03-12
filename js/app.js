@@ -175,7 +175,8 @@ function renderTripSelector() {
 
 // ── NAVIGATION ─────────────────────────────────────────────
 var PAGE_TITLES = {
-  infos: '🗺️ Infos voyage', checklist: '✅ Checklist',
+  infos: '🗺️ Infos voyage', transports: '✈️ Transports',
+  deplacements: '🚗 Déplacements', checklist: '✅ Checklist',
   bagages: '🧳 Bagages', documents: '📄 Documents',
   visiter: '📍 À visiter', budget: '💶 Budget',
   parametres: '⚙️ Paramètres'
@@ -199,7 +200,6 @@ function navigate(page) {
   else if (page === 'documents') renderDocuments();
   else if (page === 'visiter') {
     renderLieux();
-    // Détruire la carte si le voyage a changé (même logique que hébergement)
     if (_visiterMap && _visiterLastTripId !== (currentTrip() && currentTrip().id)) {
       _visiterMap = null; _visiterAutocomplete = null;
       _visiterHebMarker = null; _visiterInfoWindow = null;
@@ -218,9 +218,15 @@ function navigate(page) {
   else if (page === 'budget') renderBudget();
   else if (page === 'parametres') renderParametres();
   else if (page === 'infos') {
-    // Détruire l'instance pour forcer réinit propre (le div est caché/réaffiché)
     _hebMap = null; _hebCurrentMarker = null; _hebAutocomplete = null; _hebInfoWindow = null;
     setTimeout(refreshHebMap, 100);
+    fillInfoForm();
+  }
+  else if (page === 'transports' || page === 'deplacements') {
+    loadCurrentTrip();
+    if (page === 'deplacements') {
+      setTimeout(function() { if (!_deplMap) initDeplMap(); else google.maps.event.trigger(_deplMap, 'resize'); }, 100);
+    }
   }
 }
 
@@ -245,7 +251,7 @@ var INFO_FIELDS = [
   'infoTransportRetour','infoAeroportRetourDepart','infoAeroportRetourArrivee','infoNumVolRetour',
   'infoHeureDepartRetour','infoHeureArriveeRetour','infoPNRRetour','infoCompagnieRetour','infoTerminalRetour','infoLienTicketRetour',
   'infoParkingReserve','infoParkingNom','infoParkingRef','infoTransfertNotes',
-  'infoLocationVoiture','infoLocationSociete','infoLocationRef','infoLocationLieu',
+  'infoLocationVoiture','infoLocationSociete','infoLocationRef','infoLocationLieu','infoLocationMaps',
   'infoBagageCabine','infoBagageSoute','infoBagagesNotes',
   'infoAssurance','infoAssuranceTel','infoGroupeSanguin','infoMedicaments'
 ];
@@ -321,9 +327,10 @@ function loadCurrentTrip() {
     if (el) el.value = trip ? (trip.infos[id] || '') : '';
   });
   updateSubtitle();
+  // Sync the visual range calendar from hidden date fields
+  _rcpSyncDisplay();
   updateNuitsDisplay();
   updateMapsHebDest();
-  // Pré-remplir les dates transport uniquement si champs encore vides
   var hdAller = document.getElementById('infoHeureDepart');
   var hdRetour = document.getElementById('infoHeureDepartRetour');
   var d1 = document.getElementById('infoDateDepart') ? document.getElementById('infoDateDepart').value : '';
@@ -881,6 +888,368 @@ function resetBagages() {
 }
 
 // ── DOCUMENTS ──────────────────────────────────────────────
+// ── STUB manquant (appelé par onHebTypeChange) ─────────────
+function updateHebergementUI() { /* plus de show/hide nécessaire */ }
+
+// ── RANGE CALENDAR ─────────────────────────────────────────
+var _rcpYear  = new Date().getFullYear();
+var _rcpMonth = new Date().getMonth(); // 0-based
+var _rcpStart = null; // 'YYYY-MM-DD'
+var _rcpEnd   = null;
+var _rcpDragging = false;
+
+var _RCP_DAYS_FR = ['Lu','Ma','Me','Je','Ve','Sa','Di'];
+var _RCP_MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                      'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function toggleRangeCal() {
+  var popup = document.getElementById('rangeCalPopup');
+  if (!popup) return;
+  if (popup.classList.contains('open')) {
+    popup.classList.remove('open');
+  } else {
+    // Centrer sur le mois de départ si déjà sélectionné
+    if (_rcpStart) {
+      var d = new Date(_rcpStart + 'T00:00');
+      _rcpYear = d.getFullYear(); _rcpMonth = d.getMonth();
+    } else {
+      var now = new Date();
+      _rcpYear = now.getFullYear(); _rcpMonth = now.getMonth();
+    }
+    _rcpRender();
+    popup.classList.add('open');
+  }
+}
+
+function _rcpClose() {
+  var popup = document.getElementById('rangeCalPopup');
+  if (popup) popup.classList.remove('open');
+}
+
+function rangeCalPrev() { _rcpMonth--; if (_rcpMonth < 0) { _rcpMonth = 11; _rcpYear--; } _rcpRender(); }
+function rangeCalNext() { _rcpMonth++; if (_rcpMonth > 11) { _rcpMonth = 0; _rcpYear++; } _rcpRender(); }
+
+function _rcpRender() {
+  var labelEl  = document.getElementById('rcpMonthLabel');
+  var namesEl  = document.getElementById('rcpDayNames');
+  var daysEl   = document.getElementById('rcpDays');
+  var hintEl   = document.getElementById('rcpHint');
+  if (!labelEl || !daysEl) return;
+
+  labelEl.textContent = _RCP_MONTHS_FR[_rcpMonth] + ' ' + _rcpYear;
+
+  // En-têtes jours
+  namesEl.innerHTML = _RCP_DAYS_FR.map(function(d) {
+    return '<div class="rcp-day-name">' + d + '</div>';
+  }).join('');
+
+  // Calcul des jours du mois (lundi=0 en semaine)
+  var firstDay = new Date(_rcpYear, _rcpMonth, 1).getDay(); // 0=dim
+  var firstMon = (firstDay + 6) % 7; // décalage lundi=0
+  var daysInMonth = new Date(_rcpYear, _rcpMonth + 1, 0).getDate();
+  var today = new Date(); today.setHours(0,0,0,0);
+
+  var cells = '';
+  // Vides avant le 1er
+  for (var i = 0; i < firstMon; i++) cells += '<div class="rcp-day"></div>';
+
+  for (var d = 1; d <= daysInMonth; d++) {
+    var iso = _rcpYear + '-' + _pad((_rcpMonth+1)) + '-' + _pad(d);
+    var cls = ['rcp-day'];
+    var cellDate = new Date(iso + 'T00:00');
+    if (cellDate.getTime() === today.getTime()) cls.push('today');
+    if (_rcpStart && iso === _rcpStart) cls.push('start');
+    if (_rcpEnd   && iso === _rcpEnd)   cls.push('end');
+    if (_rcpStart && _rcpEnd && iso > _rcpStart && iso < _rcpEnd) cls.push('in-range');
+    cells += '<div class="' + cls.join(' ') + '" data-date="' + iso + '"'
+           + ' onmousedown="_rcpMouseDown(\'' + iso + '\')"'
+           + ' onmouseenter="_rcpMouseEnter(\'' + iso + '\')"'
+           + ' onmouseup="_rcpMouseUp(\'' + iso + '\')"'
+           + ' ontouchstart="_rcpTouchStart(\'' + iso + '\',event)"'
+           + ' ontouchmove="_rcpTouchMove(event)"'
+           + ' ontouchend="_rcpTouchEnd(event)"'
+           + '>' + d + '</div>';
+  }
+  daysEl.innerHTML = cells;
+
+  // Hint
+  if (hintEl) {
+    if (!_rcpStart) hintEl.textContent = 'Cliquez sur la date de départ';
+    else if (!_rcpEnd) hintEl.textContent = 'Cliquez sur la date de retour (ou glissez)';
+    else hintEl.textContent = _rcpFormatDisplay(_rcpStart) + '  →  ' + _rcpFormatDisplay(_rcpEnd);
+  }
+}
+
+function _pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function _rcpFormatDisplay(iso) {
+  if (!iso) return '';
+  var p = iso.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+function _rcpMouseDown(iso) {
+  _rcpDragging = true;
+  _rcpStart = iso; _rcpEnd = null;
+  _rcpRender();
+}
+function _rcpMouseEnter(iso) {
+  if (!_rcpDragging || !_rcpStart) return;
+  if (iso >= _rcpStart) _rcpEnd = iso;
+  else { _rcpEnd = _rcpStart; _rcpStart = iso; }
+  _rcpRender();
+}
+function _rcpMouseUp(iso) {
+  if (!_rcpDragging) return;
+  _rcpDragging = false;
+  if (iso >= _rcpStart) _rcpEnd = iso;
+  else { _rcpEnd = _rcpStart; _rcpStart = iso; }
+  if (_rcpStart === _rcpEnd) _rcpEnd = null;
+  _rcpRender();
+  if (_rcpStart && _rcpEnd) { _rcpCommit(); }
+}
+
+// Touch support
+var _rcpTouchIso = null;
+function _rcpTouchStart(iso, e) {
+  e.preventDefault();
+  _rcpDragging = true; _rcpTouchIso = iso;
+  _rcpStart = iso; _rcpEnd = null;
+  _rcpRender();
+}
+function _rcpTouchMove(e) {
+  if (!_rcpDragging) return;
+  e.preventDefault();
+  var touch = e.touches[0];
+  var el = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (el && el.dataset && el.dataset.date) {
+    var iso = el.dataset.date;
+    if (iso >= _rcpStart) _rcpEnd = iso;
+    else { _rcpEnd = _rcpStart; _rcpStart = iso; }
+    _rcpRender();
+  }
+}
+function _rcpTouchEnd(e) {
+  _rcpDragging = false;
+  if (_rcpStart && _rcpEnd && _rcpStart !== _rcpEnd) _rcpCommit();
+  else if (_rcpStart && !_rcpEnd) {
+    // Simple tap → attendre 2e tap pour la fin
+  }
+}
+
+function _rcpCommit() {
+  var d1El = document.getElementById('infoDateDepart');
+  var d2El = document.getElementById('infoDateRetour');
+  if (d1El) d1El.value = _rcpStart;
+  if (d2El) d2El.value = _rcpEnd;
+  _rcpSyncDisplay();
+  updateNuitsDisplay();
+  updateChecklistOnChange();
+  // Fermer après un court délai pour que l'user voie la sélection
+  setTimeout(_rcpClose, 300);
+}
+
+function _rcpSyncDisplay() {
+  var d1El = document.getElementById('infoDateDepart');
+  var d2El = document.getElementById('infoDateRetour');
+  var d1 = d1El ? d1El.value : '';
+  var d2 = d2El ? d2El.value : '';
+  _rcpStart = d1 || null;
+  _rcpEnd   = d2 || null;
+
+  var dispEl  = document.getElementById('dateRangeDisplay');
+  var labelEl = document.getElementById('dateRangeLabel');
+  var clearEl = document.getElementById('dateRangeClear');
+  if (!labelEl) return;
+  if (d1 && d2) {
+    labelEl.className = 'rcd-dates';
+    labelEl.innerHTML = '<span>' + _rcpFormatDisplay(d1) + '</span>'
+      + '<span class="rcd-arrow">→</span>'
+      + '<span>' + _rcpFormatDisplay(d2) + '</span>';
+    if (clearEl) clearEl.style.display = 'inline-block';
+    if (dispEl) dispEl.classList.add('has-dates');
+  } else if (d1) {
+    labelEl.className = 'rcd-dates';
+    labelEl.innerHTML = '<span>' + _rcpFormatDisplay(d1) + '</span><span style="color:var(--text3)"> → …</span>';
+    if (clearEl) clearEl.style.display = 'inline-block';
+    if (dispEl) dispEl.classList.add('has-dates');
+  } else {
+    labelEl.className = 'rcd-placeholder';
+    labelEl.textContent = 'Sélectionner les dates…';
+    if (clearEl) clearEl.style.display = 'none';
+    if (dispEl) dispEl.classList.remove('has-dates');
+  }
+}
+
+function clearRangeDates(e) {
+  e.stopPropagation();
+  _rcpStart = null; _rcpEnd = null;
+  var d1El = document.getElementById('infoDateDepart');
+  var d2El = document.getElementById('infoDateRetour');
+  if (d1El) d1El.value = '';
+  if (d2El) d2El.value = '';
+  _rcpSyncDisplay();
+  updateNuitsDisplay();
+}
+
+// Fermer le calendrier si clic en dehors
+document.addEventListener('mousedown', function(e) {
+  var wrap = document.getElementById('dateRangeWrap');
+  if (wrap && !wrap.contains(e.target)) _rcpClose();
+});
+document.addEventListener('mouseup', function() { _rcpDragging = false; });
+
+// ── CARTE DÉPLACEMENTS (loueurs) ───────────────────────────
+var _deplMap          = null;
+var _deplAutocomplete = null;
+var _deplInfoWindow   = null;
+var _deplSearchMarkers = [];
+var _deplLastTripId   = null;
+
+function initDeplMap() {
+  if (!_googleMapsReady || !window.google) return;
+  var trip   = currentTrip();
+  var tripId = trip ? trip.id : null;
+  if (_deplMap && _deplLastTripId !== tripId) {
+    _deplMap = null; _deplAutocomplete = null;
+    _deplInfoWindow = null; _deplSearchMarkers = [];
+    var old = document.getElementById('deplGoogleMap');
+    if (old) old.innerHTML = '';
+  }
+  _deplLastTripId = tripId;
+
+  var center = { lat: 48.8566, lng: 2.3522 };
+  var zoom   = 12;
+  var dest = [
+    trip && trip.infos && trip.infos.infoVille,
+    trip && trip.infos && trip.infos.infoPays
+  ].filter(Boolean).join(', ');
+
+  function build(c, z) {
+    var mapEl = document.getElementById('deplGoogleMap');
+    if (!mapEl || _deplMap) return;
+    _deplMap = new google.maps.Map(mapEl, {
+      center: c, zoom: z,
+      mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+      gestureHandling: 'cooperative',
+      styles: _darkMapStyles()
+    });
+    _deplInfoWindow = new google.maps.InfoWindow();
+
+    var searchInput = document.getElementById('deplMapSearch');
+    _deplAutocomplete = new google.maps.places.Autocomplete(searchInput, { language: 'fr' });
+    _deplAutocomplete.bindTo('bounds', _deplMap);
+    _deplAutocomplete.addListener('place_changed', function() {
+      var place = _deplAutocomplete.getPlace();
+      if (!place || !place.geometry) return;
+      _deplClearMarkers();
+      _deplPlaceMarker(place, 0);
+      _deplMap.panTo(place.geometry.location);
+    });
+
+    _deplMap.addListener('click', function(e) {
+      _deplShowNearby(e.latLng);
+    });
+
+    var hint = document.getElementById('deplMapHint');
+    if (hint) hint.textContent = '💡 Cliquez sur la carte pour afficher les loueurs 🟡 à proximité.';
+
+    setTimeout(function() {
+      if (_deplMap) _deplShowNearby(_deplMap.getCenter());
+    }, 700);
+  }
+
+  if (dest) {
+    new google.maps.Geocoder().geocode({ address: dest, language: 'fr' }, function(res, st) {
+      if (st === 'OK' && res[0]) {
+        center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
+        zoom = 13;
+      }
+      build(center, zoom);
+    });
+  } else {
+    build(center, zoom);
+  }
+}
+
+function _deplClearMarkers() {
+  _deplSearchMarkers.forEach(function(m) { m.setMap(null); });
+  _deplSearchMarkers = [];
+}
+
+function _deplShowNearby(latLng) {
+  if (!_deplMap) return;
+  var service = new google.maps.places.PlacesService(_deplMap);
+  service.nearbySearch({
+    location: latLng,
+    radius: 20000,
+    keyword: 'location voiture rental car Hertz Europcar Sixt',
+    language: 'fr'
+  }, function(results, status) {
+    _deplClearMarkers();
+    if (status !== google.maps.places.PlacesServiceStatus.OK || !results) return;
+    results.slice(0, 12).forEach(function(place, idx) { _deplPlaceMarker(place, idx); });
+  });
+}
+
+function _deplPlaceMarker(place, idx) {
+  if (!place.geometry) return;
+  var marker = new google.maps.Marker({
+    position: place.geometry.location,
+    map: _deplMap,
+    title: place.name,
+    icon: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+    zIndex: idx
+  });
+  _deplSearchMarkers.push(marker);
+  marker.addListener('click', function() {
+    var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='
+      + encodeURIComponent(place.name + ' ' + (place.vicinity || ''))
+      + (place.place_id ? '&query_place_id=' + place.place_id : '');
+    var content = '<div style="color:#111;font-size:13px;max-width:240px">'
+      + '<b>🚗 ' + escHtml(place.name) + '</b><br>'
+      + (place.vicinity ? '<span style="color:#555">' + escHtml(place.vicinity) + '</span><br>' : '')
+      + (place.rating ? '⭐ ' + place.rating + '<br>' : '')
+      + '<button onclick="selectDeplPlace(\'' + place.place_id + '\',\'' + escHtml(place.name).replace(/'/g,"&#39;") + '\',\'' + encodeURIComponent(mapsUrl) + '\')" '
+      + 'style="margin-top:7px;background:#1565C0;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">'
+      + '🚗 Choisir ce loueur</button></div>';
+    _deplInfoWindow.setContent(content);
+    _deplInfoWindow.open(_deplMap, marker);
+  });
+}
+
+function selectDeplPlace(placeId, name, encodedMapsUrl) {
+  if (!placeId) return;
+  new google.maps.places.PlacesService(_deplMap).getDetails({
+    placeId: placeId, language: 'fr',
+    fields: ['name','formatted_address','formatted_phone_number','website','geometry','place_id']
+  }, function(detail, st) {
+    var place = (st === google.maps.places.PlacesServiceStatus.OK && detail) ? detail : { name: name };
+    var mapsUrl = decodeURIComponent(encodedMapsUrl);
+    var nomEl  = document.getElementById('infoLocationSociete');
+    var lieuEl = document.getElementById('infoLocationLieu');
+    var mapsEl = document.getElementById('infoLocationMaps');
+    if (nomEl)  nomEl.value  = place.name || name;
+    if (lieuEl) lieuEl.value = place.formatted_address || '';
+    if (mapsEl) mapsEl.value = mapsUrl;
+    if (_deplInfoWindow) _deplInfoWindow.close();
+    toast('🚗 Loueur sélectionné : ' + (place.name || name), 'success');
+    // Auto-passer à oui pour location voiture
+    var locEl = document.getElementById('infoLocationVoiture');
+    if (locEl) locEl.value = 'oui';
+  });
+}
+
+function locateMeDepl() {
+  if (!navigator.geolocation) { toast('Géolocalisation non supportée', 'error'); return; }
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    if (!_deplMap) return;
+    var ll = new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+    _deplMap.panTo(ll); _deplMap.setZoom(14);
+    _deplShowNearby(ll);
+  });
+}
+
 function renderDocuments() {
   var trip = currentTrip();
   var container = document.getElementById('documentsContainer');
@@ -951,17 +1320,18 @@ function renderDocuments() {
     '</div></div>' +
 
     '<div class="doc-card">' +
-    '<div class="doc-card-header"><span>🅿️</span><span class="doc-card-title">Parking & Location véhicule</span></div>' +
+    '<div class="doc-card-header"><span>🅿️</span><span class="doc-card-title">Parking & Déplacements</span></div>' +
     '<div class="doc-grid">' +
     '<div class="doc-field"><span class="doc-field-label">Parking</span>' + f(i.infoParkingNom) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Réf. parking</span>' + f(i.infoParkingRef) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Société location</span>' + f(i.infoLocationSociete) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Réf. location</span>' + f(i.infoLocationRef) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">Lieu prise en charge</span>' + f(i.infoLocationLieu) + '</div>' +
+    (i.infoLocationMaps ? '<div class="doc-field"><span class="doc-field-label">Maps loueur</span>' + fLink(i.infoLocationMaps) + '</div>' : '') +
     '</div></div>' +
 
     '<div class="doc-card">' +
-    '<div class="doc-card-header"><span>🏥</span><span class="doc-card-title">Santé & Urgences</span></div>' +
+    '<div class="doc-card-header"><span>🏥</span><span class="doc-card-title">Assurance & Santé</span></div>' +
     '<div class="doc-grid">' +
     '<div class="doc-field"><span class="doc-field-label">Assurance</span>' + f(i.infoAssurance) + '</div>' +
     '<div class="doc-field"><span class="doc-field-label">N° urgence assurance</span>' + f(i.infoAssuranceTel) + '</div>' +
