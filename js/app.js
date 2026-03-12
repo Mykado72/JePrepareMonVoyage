@@ -197,7 +197,7 @@ function navigate(page) {
 
   if (page === 'checklist') refreshChecklist();
   else if (page === 'bagages') renderBagages();
-  else if (page === 'documents') { renderDocuments(); loadCurrentTrip(); }
+  else if (page === 'documents') renderDocuments();
   else if (page === 'visiter') {
     renderLieux();
     if (_visiterMap && _visiterLastTripId !== (currentTrip() && currentTrip().id)) {
@@ -220,6 +220,7 @@ function navigate(page) {
   else if (page === 'infos') {
     _hebMap = null; _hebCurrentMarker = null; _hebAutocomplete = null; _hebInfoWindow = null;
     setTimeout(refreshHebMap, 100);
+    fillInfoForm();
   }
   else if (page === 'transports' || page === 'deplacements') {
     loadCurrentTrip();
@@ -479,9 +480,6 @@ function setupAutocomplete(inputId, list, maxItems) {
 function _setupAC(inputId, list, listFn, maxItems) {
   var input = document.getElementById(inputId);
   if (!input) return;
-  // Guard : ne pas initialiser deux fois
-  if (input._acInitialized) return;
-  input._acInitialized = true;
 
   var wrap = document.createElement('div');
   wrap.style.cssText = 'position:relative;display:block;';
@@ -490,13 +488,14 @@ function _setupAC(inputId, list, listFn, maxItems) {
 
   var dd = document.createElement('div');
   dd.style.cssText = [
-    'display:none','position:absolute','top:100%','left:0','right:0','z-index:900',
+    'display:none','position:absolute','top:100%','left:0','right:0','z-index:600',
     'background:var(--surface2)','border:1.5px solid var(--primary)',
     'border-top:none','border-radius:0 0 8px 8px',
     'max-height:220px','overflow-y:auto','box-shadow:0 8px 24px rgba(0,0,0,0.5)'
   ].join(';');
   wrap.appendChild(dd);
 
+  // Stocker ref directe sur l'input pour pouvoir fermer depuis pickAC
   input._acDropdown = dd;
 
   function getList() { return listFn ? listFn() : list; }
@@ -963,30 +962,15 @@ function _rcpRender() {
     if (_rcpEnd   && iso === _rcpEnd)   cls.push('end');
     if (_rcpStart && _rcpEnd && iso > _rcpStart && iso < _rcpEnd) cls.push('in-range');
     cells += '<div class="' + cls.join(' ') + '" data-date="' + iso + '"'
+           + ' onmousedown="_rcpMouseDown(\'' + iso + '\')"'
+           + ' onmouseenter="_rcpMouseEnter(\'' + iso + '\')"'
+           + ' onmouseup="_rcpMouseUp(\'' + iso + '\')"'
            + ' ontouchstart="_rcpTouchStart(\'' + iso + '\',event)"'
            + ' ontouchmove="_rcpTouchMove(event)"'
            + ' ontouchend="_rcpTouchEnd(event)"'
            + '>' + d + '</div>';
   }
   daysEl.innerHTML = cells;
-
-  // Délégation d'événements sur le conteneur des jours (meilleur que per-cell pour le drag)
-  daysEl.onmousedown = function(e) {
-    var cell = e.target.closest ? e.target.closest('.rcp-day') : e.target;
-    if (!cell || !cell.dataset.date) return;
-    e.preventDefault();
-    _rcpMouseDown(cell.dataset.date);
-  };
-  daysEl.onmousemove = function(e) {
-    if (!_rcpDragging) return;
-    var cell = e.target.closest ? e.target.closest('.rcp-day') : e.target;
-    if (cell && cell.dataset.date) _rcpMouseEnter(cell.dataset.date);
-  };
-  daysEl.onmouseup = function(e) {
-    var cell = e.target.closest ? e.target.closest('.rcp-day') : e.target;
-    if (!cell || !cell.dataset.date) return;
-    _rcpMouseUp(cell.dataset.date);
-  };
 
   // Hint
   if (hintEl) {
@@ -1007,42 +991,25 @@ function _rcpFormatDisplay(iso) {
 function _rcpMouseDown(iso) {
   _rcpDragging = true;
   _rcpStart = iso; _rcpEnd = null;
-  _rcpHighlight(); // Ne PAS reconstruire le DOM, juste mettre à jour les classes
+  _rcpRender();
 }
 function _rcpMouseEnter(iso) {
   if (!_rcpDragging || !_rcpStart) return;
   if (iso >= _rcpStart) _rcpEnd = iso;
   else { _rcpEnd = _rcpStart; _rcpStart = iso; }
-  _rcpHighlight();
+  _rcpRender();
 }
-function _rcpHighlight() {
-  // Met à jour les classes CSS sans reconstruire le DOM
-  var daysEl = document.getElementById('rcpDays');
-  if (!daysEl) return;
-  daysEl.querySelectorAll('.rcp-day[data-date]').forEach(function(cell) {
-    var iso = cell.dataset.date;
-    cell.classList.remove('start','end','in-range');
-    if (_rcpStart && iso === _rcpStart) cell.classList.add('start');
-    if (_rcpEnd   && iso === _rcpEnd)   cell.classList.add('end');
-    if (_rcpStart && _rcpEnd && iso > _rcpStart && iso < _rcpEnd) cell.classList.add('in-range');
-  });
-  var hintEl = document.getElementById('rcpHint');
-  if (hintEl) {
-    if (!_rcpStart) hintEl.textContent = 'Cliquez sur la date de départ';
-    else if (!_rcpEnd) hintEl.textContent = 'Cliquez sur la date de retour (ou glissez)';
-    else hintEl.textContent = _rcpFormatDisplay(_rcpStart) + '  →  ' + _rcpFormatDisplay(_rcpEnd);
-  }
-}
-
 function _rcpMouseUp(iso) {
   if (!_rcpDragging) return;
   _rcpDragging = false;
   if (iso >= _rcpStart) _rcpEnd = iso;
   else { _rcpEnd = _rcpStart; _rcpStart = iso; }
   if (_rcpStart === _rcpEnd) _rcpEnd = null;
-  _rcpHighlight();
+  _rcpRender();
   if (_rcpStart && _rcpEnd) { _rcpCommit(); }
 }
+
+// Touch support
 var _rcpTouchIso = null;
 function _rcpTouchStart(iso, e) {
   e.preventDefault();
@@ -1130,20 +1097,7 @@ document.addEventListener('mousedown', function(e) {
   var wrap = document.getElementById('dateRangeWrap');
   if (wrap && !wrap.contains(e.target)) _rcpClose();
 });
-// Mouseup global : finalise le drag même si la souris sort des cellules
-document.addEventListener('mouseup', function(e) {
-  if (!_rcpDragging) return;
-  _rcpDragging = false;
-  var el = e.target && (e.target.closest ? e.target.closest('.rcp-day') : e.target);
-  if (el && el.dataset && el.dataset.date) {
-    var iso = el.dataset.date;
-    if (iso >= _rcpStart) _rcpEnd = iso;
-    else { _rcpEnd = _rcpStart; _rcpStart = iso; }
-  }
-  if (_rcpStart === _rcpEnd) _rcpEnd = null;
-  _rcpHighlight();
-  if (_rcpStart && _rcpEnd) _rcpCommit();
-});
+document.addEventListener('mouseup', function() { _rcpDragging = false; });
 
 // ── CARTE DÉPLACEMENTS (loueurs) ───────────────────────────
 var _deplMap          = null;
@@ -1165,14 +1119,7 @@ function initDeplMap() {
   _deplLastTripId = tripId;
 
   var center = { lat: 48.8566, lng: 2.3522 };
-  var zoom   = 13;
-
-  // Hébergement enregistré → centre prioritaire
-  var hebCenter = null;
-  if (trip && trip.infos && trip.infos._hebLat) {
-    hebCenter = { lat: parseFloat(trip.infos._hebLat), lng: parseFloat(trip.infos._hebLon) };
-  }
-
+  var zoom   = 12;
   var dest = [
     trip && trip.infos && trip.infos.infoVille,
     trip && trip.infos && trip.infos.infoPays
@@ -1189,19 +1136,6 @@ function initDeplMap() {
     });
     _deplInfoWindow = new google.maps.InfoWindow();
 
-    // ── Marqueur vert hébergement ──
-    if (hebCenter) {
-      var hebNom = (trip && trip.infos && trip.infos.infoNomHebergement) || 'Hébergement';
-      var hebMarker = new google.maps.Marker({
-        position: hebCenter, map: _deplMap, title: hebNom,
-        icon: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png', zIndex: 999
-      });
-      hebMarker.addListener('click', function() {
-        _deplInfoWindow.setContent('<div style="color:#111;font-size:13px"><b>🏨 ' + escHtml(hebNom) + '</b><br><span style="color:#555">Votre hébergement</span></div>');
-        _deplInfoWindow.open(_deplMap, hebMarker);
-      });
-    }
-
     var searchInput = document.getElementById('deplMapSearch');
     _deplAutocomplete = new google.maps.places.Autocomplete(searchInput, { language: 'fr' });
     _deplAutocomplete.bindTo('bounds', _deplMap);
@@ -1213,22 +1147,23 @@ function initDeplMap() {
       _deplMap.panTo(place.geometry.location);
     });
 
-    _deplMap.addListener('click', function(e) { _deplShowNearby(e.latLng); });
+    _deplMap.addListener('click', function(e) {
+      _deplShowNearby(e.latLng);
+    });
 
     var hint = document.getElementById('deplMapHint');
-    if (hint) hint.textContent = '💡 🟢 = votre hébergement · Cliquez sur la carte pour afficher les loueurs 🟡 à proximité.';
+    if (hint) hint.textContent = '💡 Cliquez sur la carte pour afficher les loueurs 🟡 à proximité.';
 
     setTimeout(function() {
       if (_deplMap) _deplShowNearby(_deplMap.getCenter());
     }, 700);
   }
 
-  if (hebCenter) {
-    build(hebCenter, 14);
-  } else if (dest) {
+  if (dest) {
     new google.maps.Geocoder().geocode({ address: dest, language: 'fr' }, function(res, st) {
       if (st === 'OK' && res[0]) {
         center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
+        zoom = 13;
       }
       build(center, zoom);
     });
@@ -1607,26 +1542,13 @@ function _clearHebSearchMarkers() {
   if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
 }
 
-// Recherche les hébergements (ou loueurs) à proximité d'un point et affiche les marqueurs jaunes
+// Recherche les hébergements à proximité d'un point et affiche les marqueurs jaunes
 function _showNearbyHebMarkers(latLng) {
   if (!_hebMap || !window.google) return;
   var service = new google.maps.places.PlacesService(_hebMap);
 
   // Keyword selon le type sélectionné
   var val = (document.getElementById('infoTypeHebergement') || {}).value || '';
-
-  if (val === 'loueur') {
-    // Mode loueur de véhicule
-    service.nearbySearch({ location: latLng, radius: 20000,
-      keyword: 'location voiture rental car Hertz Europcar Sixt', language: 'fr' },
-      function(results, status) {
-        _clearHebSearchMarkers();
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) return;
-        results.slice(0, 15).forEach(function(p, i) { _placeHebSearchMarker(p, i); });
-      });
-    return;
-  }
-
   var keyword = val === 'camping' ? 'camping'
               : val === 'airbnb'  ? 'location vacances appartement'
               : val === 'gite'    ? 'gite chambre hotes bed breakfast'
@@ -1662,19 +1584,11 @@ function _placeHebSearchMarker(place, idx) {
          : '')
     : '';
 
-  var val = (document.getElementById('infoTypeHebergement') || {}).value || '';
-  var isLoueur = val === 'loueur';
-
   var marker = new google.maps.Marker({
     map: _hebMap, position: pos, title: place.name,
     icon: { url: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png' },
     animation: idx < 3 ? google.maps.Animation.DROP : null
   });
-
-  var btnLabel = isLoueur ? '🚗 Choisir ce loueur' : '🏨 Choisir cet hébergement';
-  var btnAction = isLoueur
-    ? 'selectLoueurFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(mapsUrl) + '\')'
-    : 'selectHebPlace(\'' + place.place_id + '\')';
 
   var iw = new google.maps.InfoWindow({
     content: '<div style="color:#111;font-size:13px;max-width:260px">'
@@ -1682,9 +1596,9 @@ function _placeHebSearchMarker(place, idx) {
       + rating
       + (place.vicinity ? '<br><span style="color:#555;font-size:11px">' + escHtml(place.vicinity) + '</span>' : '')
       + '<br><div style="display:flex;gap:6px;margin-top:8px">'
-      + '<button onclick="' + btnAction + '" '
+      + '<button onclick="selectHebPlace(\'' + place.place_id + '\')" '
       + 'style="flex:1;padding:6px 8px;background:#1976D2;color:#fff;border:none;border-radius:4px;'
-      + 'cursor:pointer;font-size:12px;font-weight:700">' + btnLabel + '</button>'
+      + 'cursor:pointer;font-size:12px;font-weight:700">🏨 Choisir cet hébergement</button>'
       + '<a href="' + mapsUrl + '" target="_blank" rel="noopener" '
       + 'style="padding:6px 10px;background:#4CAF50;color:#fff;border-radius:4px;'
       + 'font-size:12px;font-weight:700;text-decoration:none">🗺️</a>'
@@ -1710,38 +1624,6 @@ function selectHebPlace(placeId) {
     if (st !== google.maps.places.PlacesServiceStatus.OK || !place) return;
     _clearHebSearchMarkers();
     _fillHebFromPlace(place);
-  });
-}
-
-// Sélectionne un loueur depuis la carte hébergement → redirige vers les champs Déplacements
-function selectLoueurFromHebMap(placeId, encodedMapsUrl) {
-  if (!_hebMap || !window.google) return;
-  new google.maps.places.PlacesService(_hebMap).getDetails({
-    placeId: placeId, language: 'fr',
-    fields: ['name','formatted_address','formatted_phone_number','website','geometry','place_id']
-  }, function(place, st) {
-    var mapsUrl = decodeURIComponent(encodedMapsUrl);
-    var nom     = (st === google.maps.places.PlacesServiceStatus.OK && place) ? place.name : '';
-    var adresse = (st === google.maps.places.PlacesServiceStatus.OK && place) ? (place.formatted_address || '') : '';
-
-    // Remplir les champs de la page Déplacements
-    var nomEl   = document.getElementById('infoLocationSociete');
-    var lieuEl  = document.getElementById('infoLocationLieu');
-    var mapsEl  = document.getElementById('infoLocationMaps');
-    var locEl   = document.getElementById('infoLocationVoiture');
-    if (nomEl)  nomEl.value  = nom;
-    if (lieuEl) lieuEl.value = adresse;
-    if (mapsEl) mapsEl.value = mapsUrl;
-    if (locEl)  locEl.value  = 'oui';
-
-    _clearHebSearchMarkers();
-    if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
-
-    toast('🚗 Loueur sélectionné : ' + nom + ' — voir page Déplacements', 'success');
-    // Proposer de naviguer vers la page Déplacements
-    setTimeout(function() {
-      if (confirm('Loueur "' + nom + '" enregistré. Aller sur la page Déplacements ?')) navigate('deplacements');
-    }, 400);
   });
 }
 
@@ -1818,15 +1700,7 @@ function _recalcAllDistances(trip) {
 // Changement de type → relancer la recherche autour du centre actuel
 function onHebTypeChange() {
   updateHebergementUI();
-  if (!_hebMap) return;
-  var val = (document.getElementById('infoTypeHebergement') || {}).value || '';
-  var hint = document.getElementById('hebMapHint');
-  if (val === 'loueur') {
-    if (hint) hint.textContent = '🚗 Mode loueur · Cliquez sur la carte pour afficher les loueurs 🟡 — sélectionnez-en un pour remplir la page Déplacements.';
-  } else {
-    if (hint) hint.textContent = '💡 🟢 = hébergement enregistré · Cliquez sur la carte pour afficher les hébergements 🟡 à proximité.';
-  }
-  _showNearbyHebMarkers(_hebMap.getCenter());
+  if (_hebMap) _showNearbyHebMarkers(_hebMap.getCenter());
 }
 
 // Géolocalisation
