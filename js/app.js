@@ -541,9 +541,17 @@ function _setupAC(inputId, list, listFn, maxItems) {
 
   input.addEventListener('input',  function() { show(input.value); });
   input.addEventListener('focus',  function() { if (input.value) show(input.value); });
-  input.addEventListener('blur',   function() { setTimeout(function() { dd.style.display = 'none'; }, 150); });
+  input.addEventListener('blur',   function() {
+    setTimeout(function() { dd.style.display = 'none'; }, 150);
+    // Recentrer la carte si ville ou pays modifié manuellement
+    if (inputId === 'infoVille' || inputId === 'infoPays') setTimeout(refreshHebMap, 300);
+  });
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') { dd.style.display = 'none'; input.blur(); }
+    if (e.key === 'Enter' && (inputId === 'infoVille' || inputId === 'infoPays')) {
+      dd.style.display = 'none';
+      setTimeout(refreshHebMap, 300);
+    }
   });
 }
 
@@ -1107,7 +1115,35 @@ function _buildHebMap(center, zoom) {
 
 function refreshHebMap() {
   if (!_googleMapsReady || !window.google) return;
-  initHebMap();
+
+  // Si la carte n'est pas encore construite → init normale
+  if (!_hebMap) { initHebMap(); return; }
+
+  // Carte déjà construite : lire la nouvelle ville/pays depuis le DOM
+  var trip    = currentTrip();
+  var infoVille = (document.getElementById('infoVille') || {}).value
+                || (trip && trip.infos && trip.infos.infoVille) || '';
+  var infoPays  = (document.getElementById('infoPays')  || {}).value
+                || (trip && trip.infos && trip.infos.infoPays)  || '';
+  var dest = [infoVille, infoPays].filter(Boolean).join(', ');
+  if (!dest) return;
+
+  // Mettre à jour le champ de recherche de la carte avec la nouvelle ville
+  var searchEl = document.getElementById('hebMapSearch');
+  if (searchEl) searchEl.value = infoVille || dest;
+
+  // Si un hébergement est déjà géocodé → ne pas bouger la carte
+  if (trip && trip.infos && trip.infos._hebLat) return;
+
+  // Géocoder la nouvelle destination et recentrer la carte
+  new google.maps.Geocoder().geocode({ address: dest, language: 'fr' }, function(res, st) {
+    if (st !== 'OK' || !res[0] || !_hebMap) return;
+    var center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
+    _hebMap.setCenter(center);
+    _hebMap.setZoom(13);
+    // Relancer la recherche d'hébergements autour du nouveau centre
+    setTimeout(function() { if (_hebMap) _showNearbyHebMarkers(_hebMap.getCenter()); }, 300);
+  });
 }
 
 // Affiche le marqueur vert de l'hébergement enregistré (même logique que _renderHebMarkerOnVisiter)
