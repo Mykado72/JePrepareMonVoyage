@@ -544,21 +544,31 @@ function _setupAC(inputId, list, listFn, maxItems) {
       if (villeInput) villeInput.value = '';
     }
     if (chosenField === 'infoDateDepart' || chosenField === 'infoDateRetour') updateNuitsDisplay();
-    if (chosenField === 'infoPays' || chosenField === 'infoVille') setTimeout(refreshHebMap, 300);
+    if (chosenField === 'infoPays' || chosenField === 'infoVille') {
+      setTimeout(refreshHebMap, 300);
+      setTimeout(refreshVisiterMap, 400);
+      setTimeout(refreshDeplMap, 400);
+    }
   });
 
   input.addEventListener('input',  function() { show(input.value); });
   input.addEventListener('focus',  function() { if (input.value) show(input.value); });
   input.addEventListener('blur',   function() {
     setTimeout(function() { dd.style.display = 'none'; }, 150);
-    // Recentrer la carte si ville ou pays modifié manuellement
-    if (inputId === 'infoVille' || inputId === 'infoPays') setTimeout(refreshHebMap, 300);
+    // Recentrer les cartes si ville ou pays modifié manuellement
+    if (inputId === 'infoVille' || inputId === 'infoPays') {
+      setTimeout(refreshHebMap, 300);
+      setTimeout(refreshVisiterMap, 400);
+      setTimeout(refreshDeplMap, 400);
+    }
   });
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') { dd.style.display = 'none'; input.blur(); }
     if (e.key === 'Enter' && (inputId === 'infoVille' || inputId === 'infoPays')) {
       dd.style.display = 'none';
       setTimeout(refreshHebMap, 300);
+      setTimeout(refreshVisiterMap, 400);
+      setTimeout(refreshDeplMap, 400);
     }
   });
 }
@@ -1202,6 +1212,9 @@ function initDeplMap() {
       });
     }
 
+    // ── Marqueur bleu aéroport ──
+    _renderAeroMarkerOnDepl();
+
     var searchInput = document.getElementById('deplMapSearch');
     _deplAutocomplete = new google.maps.places.Autocomplete(searchInput, { language: 'fr' });
     _deplAutocomplete.bindTo('bounds', _deplMap);
@@ -1216,7 +1229,7 @@ function initDeplMap() {
     _deplMap.addListener('click', function(e) { _deplShowNearby(e.latLng); });
 
     var hint = document.getElementById('deplMapHint');
-    if (hint) hint.textContent = '💡 🟢 = votre hébergement · Cliquez sur la carte pour afficher les loueurs 🟡 à proximité.';
+    if (hint) hint.textContent = '💡 🟢 = hébergement · 🔵 = aéroport · Cliquez sur la carte pour afficher les loueurs 🟡 à proximité.';
 
     setTimeout(function() {
       if (_deplMap) _deplShowNearby(_deplMap.getCenter());
@@ -1427,10 +1440,14 @@ var _hebLastTripId    = null;
 var _visiterMap          = null;
 var _visiterAutocomplete = null;
 var _visiterHebMarker    = null;
+var _visiterAeroMarker   = null; // marqueur bleu = aéroport d'arrivée
 var _visiterInfoWindow   = null;
 var _visiterLieuMarkers  = [];
 var _editingLieuId       = null;
 var _visiterLastTripId   = null;
+
+// Marqueur aéroport sur la carte déplacements
+var _deplAeroMarker = null;
 
 // Callback appelé par le SDK Google Maps
 function onGoogleMapsReady() {
@@ -1563,7 +1580,7 @@ function refreshHebMap() {
   var dest = [infoVille, infoPays].filter(Boolean).join(', ');
   if (!dest) return;
 
-  // Mettre à jour le champ de recherche de la carte avec la nouvelle ville
+  // Mettre à jour le champ de recherche et valider automatiquement (geocode + recentrage)
   var searchEl = document.getElementById('hebMapSearch');
   if (searchEl) searchEl.value = infoVille || dest;
 
@@ -1576,8 +1593,56 @@ function refreshHebMap() {
     var center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
     _hebMap.setCenter(center);
     _hebMap.setZoom(13);
-    // Relancer la recherche d'hébergements autour du nouveau centre
     setTimeout(function() { if (_hebMap) _showNearbyHebMarkers(_hebMap.getCenter()); }, 300);
+  });
+}
+
+// Recentre la carte "À visiter" sur la nouvelle ville sans détruire la carte
+function refreshVisiterMap() {
+  if (!_googleMapsReady || !window.google) return;
+  if (!_visiterMap) return; // pas encore construite, sera initialisée à la navigation
+
+  var trip = currentTrip();
+  var infoVille = (document.getElementById('infoVille') || {}).value
+                || (trip && trip.infos && trip.infos.infoVille) || '';
+  var infoPays  = (document.getElementById('infoPays')  || {}).value
+                || (trip && trip.infos && trip.infos.infoPays)  || '';
+  var dest = [infoVille, infoPays].filter(Boolean).join(', ');
+  if (!dest) return;
+
+  // Si hébergement géocodé → on reste centré dessus
+  if (trip && trip.infos && trip.infos._hebLat) return;
+
+  new google.maps.Geocoder().geocode({ address: dest, language: 'fr' }, function(res, st) {
+    if (st !== 'OK' || !res[0] || !_visiterMap) return;
+    var center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
+    _visiterMap.setCenter(center);
+    _visiterMap.setZoom(13);
+    setTimeout(function() { if (_visiterMap) _showVisiterSearchMarkers(_visiterMap.getCenter(), null); }, 300);
+  });
+}
+
+// Recentre la carte "Déplacements" sur la nouvelle ville sans détruire la carte
+function refreshDeplMap() {
+  if (!_googleMapsReady || !window.google) return;
+  if (!_deplMap) return;
+
+  var trip = currentTrip();
+  var infoVille = (document.getElementById('infoVille') || {}).value
+                || (trip && trip.infos && trip.infos.infoVille) || '';
+  var infoPays  = (document.getElementById('infoPays')  || {}).value
+                || (trip && trip.infos && trip.infos.infoPays)  || '';
+  var dest = [infoVille, infoPays].filter(Boolean).join(', ');
+  if (!dest) return;
+
+  if (trip && trip.infos && trip.infos._hebLat) return;
+
+  new google.maps.Geocoder().geocode({ address: dest, language: 'fr' }, function(res, st) {
+    if (st !== 'OK' || !res[0] || !_deplMap) return;
+    var center = { lat: res[0].geometry.location.lat(), lng: res[0].geometry.location.lng() };
+    _deplMap.setCenter(center);
+    _deplMap.setZoom(13);
+    setTimeout(function() { if (_deplMap) _deplShowNearby(_deplMap.getCenter()); }, 300);
   });
 }
 
@@ -1627,6 +1692,18 @@ function _showNearbyHebMarkers(latLng) {
     return;
   }
 
+  if (val === 'aeroport') {
+    // Mode aéroport d'arrivée
+    service.nearbySearch({ location: latLng, radius: 150000,
+      type: 'airport', language: 'fr' },
+      function(results, status) {
+        _clearHebSearchMarkers();
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !results.length) return;
+        results.slice(0, 15).forEach(function(p, i) { _placeHebSearchMarker(p, i); });
+      });
+    return;
+  }
+
   var keyword = val === 'camping' ? 'camping'
               : val === 'airbnb'  ? 'location vacances appartement'
               : val === 'gite'    ? 'gite chambre hotes bed breakfast'
@@ -1663,7 +1740,8 @@ function _placeHebSearchMarker(place, idx) {
     : '';
 
   var val = (document.getElementById('infoTypeHebergement') || {}).value || '';
-  var isLoueur = val === 'loueur';
+  var isLoueur  = val === 'loueur';
+  var isAeroport = val === 'aeroport';
 
   var marker = new google.maps.Marker({
     map: _hebMap, position: pos, title: place.name,
@@ -1671,10 +1749,12 @@ function _placeHebSearchMarker(place, idx) {
     animation: idx < 3 ? google.maps.Animation.DROP : null
   });
 
-  var btnLabel = isLoueur ? '🚗 Choisir ce loueur' : '🏨 Choisir cet hébergement';
-  var btnAction = isLoueur
-    ? 'selectLoueurFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(mapsUrl) + '\')'
-    : 'selectHebPlace(\'' + place.place_id + '\')';
+  var btnLabel  = isLoueur  ? '🚗 Choisir ce loueur'
+                : isAeroport ? '✈️ Choisir cet aéroport'
+                : '🏨 Choisir cet hébergement';
+  var btnAction = isLoueur  ? 'selectLoueurFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(mapsUrl) + '\')'
+                : isAeroport ? 'selectAeroportFromHebMap(\'' + place.place_id + '\',\'' + encodeURIComponent(place.name) + '\',\'' + encodeURIComponent(place.vicinity || place.formatted_address || '') + '\')'
+                : 'selectHebPlace(\'' + place.place_id + '\')';
 
   var iw = new google.maps.InfoWindow({
     content: '<div style="color:#111;font-size:13px;max-width:260px">'
@@ -1743,6 +1823,80 @@ function selectLoueurFromHebMap(placeId, encodedMapsUrl) {
       if (confirm('Loueur "' + nom + '" enregistré. Aller sur la page Déplacements ?')) navigate('deplacements');
     }, 400);
   });
+}
+
+// Sélectionne un aéroport → remplit aéroport arrivée aller + départ retour + stocke coords
+function selectAeroportFromHebMap(placeId, encodedName, encodedAddr) {
+  if (!_hebMap || !window.google) return;
+  new google.maps.places.PlacesService(_hebMap).getDetails({
+    placeId: placeId, language: 'fr',
+    fields: ['name','formatted_address','geometry','place_id','iata_code']
+  }, function(place, st) {
+    var nom    = (st === google.maps.places.PlacesServiceStatus.OK && place) ? place.name : decodeURIComponent(encodedName);
+    var adresse = (st === google.maps.places.PlacesServiceStatus.OK && place) ? (place.formatted_address || '') : decodeURIComponent(encodedAddr);
+    var lat = place && place.geometry ? place.geometry.location.lat() : null;
+    var lng = place && place.geometry ? place.geometry.location.lng() : null;
+
+    // Remplir aéroport/gare arrivée aller ET départ retour
+    var arrEl  = document.getElementById('infoAeroportArrivee');
+    var depRet = document.getElementById('infoAeroportRetourDepart');
+    if (arrEl)  arrEl.value  = nom;
+    if (depRet) depRet.value = nom;
+
+    // Stocker les coords de l'aéroport dans le trip
+    var trip = currentTrip();
+    if (trip && lat && lng) {
+      trip.infos._aeroLat = lat;
+      trip.infos._aeroLon = lng;
+      trip.infos._aeroNom = nom;
+      save();
+    }
+
+    _clearHebSearchMarkers();
+    if (_hebActiveIW) { _hebActiveIW.close(); _hebActiveIW = null; }
+
+    // Rafraîchir les marqueurs aéroport sur les autres cartes
+    _renderAeroMarkerOnVisiter();
+    _renderAeroMarkerOnDepl();
+
+    toast('✈️ Aéroport enregistré : ' + nom, 'success');
+  });
+}
+
+// Affiche le marqueur bleu de l'aéroport sur la carte À visiter
+function _renderAeroMarkerOnVisiter() {
+  if (!_visiterMap) return;
+  if (_visiterAeroMarker) { _visiterAeroMarker.setMap(null); _visiterAeroMarker = null; }
+  var trip = currentTrip();
+  if (!trip || !trip.infos || !trip.infos._aeroLat) return;
+  var pos = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  _visiterAeroMarker = new google.maps.Marker({
+    map: _visiterMap, position: pos, zIndex: 19,
+    title: trip.infos._aeroNom || 'Aéroport',
+    icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+  });
+  var iw = new google.maps.InfoWindow({
+    content: '<div style="color:#111;font-size:13px"><b>✈️ ' + escHtml(trip.infos._aeroNom || 'Aéroport') + '</b><br><span style="color:#555">Aéroport d\'arrivée</span></div>'
+  });
+  _visiterAeroMarker.addListener('click', function() { iw.open(_visiterMap, _visiterAeroMarker); });
+}
+
+// Affiche le marqueur bleu de l'aéroport sur la carte Déplacements
+function _renderAeroMarkerOnDepl() {
+  if (!_deplMap) return;
+  if (_deplAeroMarker) { _deplAeroMarker.setMap(null); _deplAeroMarker = null; }
+  var trip = currentTrip();
+  if (!trip || !trip.infos || !trip.infos._aeroLat) return;
+  var pos = { lat: parseFloat(trip.infos._aeroLat), lng: parseFloat(trip.infos._aeroLon) };
+  _deplAeroMarker = new google.maps.Marker({
+    map: _deplMap, position: pos, zIndex: 98,
+    title: trip.infos._aeroNom || 'Aéroport',
+    icon: { url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png' }
+  });
+  var iw = new google.maps.InfoWindow({
+    content: '<div style="color:#111;font-size:13px"><b>✈️ ' + escHtml(trip.infos._aeroNom || 'Aéroport') + '</b><br><span style="color:#555">Aéroport d\'arrivée</span></div>'
+  });
+  _deplAeroMarker.addListener('click', function() { iw.open(_deplMap, _deplAeroMarker); });
 }
 
 // Remplit tous les champs hébergement + met à jour le marqueur vert + recalcule distances
@@ -1823,6 +1977,8 @@ function onHebTypeChange() {
   var hint = document.getElementById('hebMapHint');
   if (val === 'loueur') {
     if (hint) hint.textContent = '🚗 Mode loueur · Cliquez sur la carte pour afficher les loueurs 🟡 — sélectionnez-en un pour remplir la page Déplacements.';
+  } else if (val === 'aeroport') {
+    if (hint) hint.textContent = '✈️ Mode aéroport · Les aéroports 🟡 s\'affichent — sélectionnez-en un pour remplir automatiquement l\'aéroport d\'arrivée (aller) et de départ (retour).';
   } else {
     if (hint) hint.textContent = '💡 🟢 = hébergement enregistré · Cliquez sur la carte pour afficher les hébergements 🟡 à proximité.';
   }
@@ -1910,6 +2066,9 @@ function _buildVisiterMap(center, zoom) {
   // Marqueur hébergement vert
   _renderHebMarkerOnVisiter();
 
+  // Marqueur aéroport bleu
+  _renderAeroMarkerOnVisiter();
+
   // Marqueurs lieux sauvegardés
   _renderVisiterMarkers();
 
@@ -1938,7 +2097,7 @@ function _buildVisiterMap(center, zoom) {
   });
 
   var hint = document.getElementById('visiterMapHint');
-  if (hint) hint.textContent = '💡 🟢 = hébergement · Cliquez sur la carte pour afficher les lieux 🟡 à proximité.';
+  if (hint) hint.textContent = '💡 🟢 = hébergement · 🔵 = aéroport · Cliquez sur la carte pour afficher les lieux 🟡 à proximité.';
 
   // Afficher automatiquement des marqueurs autour du centre au chargement
   setTimeout(function() {
