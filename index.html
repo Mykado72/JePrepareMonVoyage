@@ -181,7 +181,7 @@
 
             <div class="form-grid">
               <div class="form-group">
-                <label>Type d'hébergement</label>
+                <label>Type d'hébergement / Recherche carte</label>
                 <select id="infoTypeHebergement" onchange="onHebTypeChange()">
                   <option value="">-- Choisir --</option>
                   <option value="hotel">🏨 Hôtel</option>
@@ -189,6 +189,8 @@
                   <option value="airbnb">🏠 Airbnb</option>
                   <option value="camping">⛺ Camping</option>
                   <option value="autre">🛖 Autre</option>
+                  <optgroup label="─────────────────"></optgroup>
+                  <option value="loueur">🚗 Loueur de véhicule</option>
                 </select>
               </div>
               <div class="form-group">
@@ -458,33 +460,6 @@
             </div>
           </div>
 
-          <!-- Assurance & Santé (déplacée ici depuis Infos) -->
-          <div class="card">
-            <div class="card-header"><span class="card-icon">🏥</span><h2>Assurance &amp; Santé</h2></div>
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Assurance voyage ?</label>
-                <select id="infoAssurance">
-                  <option value="non">Non</option>
-                  <option value="cb">Via carte bancaire</option>
-                  <option value="souscrite">Souscrite séparément</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Numéro d'urgence assurance</label>
-                <input type="text" id="infoAssuranceTel" placeholder="+33 1 XX XX XX XX"/>
-              </div>
-              <div class="form-group">
-                <label>Groupe sanguin</label>
-                <input type="text" id="infoGroupeSanguin" placeholder="A+, O-, B+…"/>
-              </div>
-              <div class="form-group">
-                <label>Allergies / médicaments</label>
-                <textarea id="infoMedicaments" rows="2" placeholder="Informations médicales importantes…"></textarea>
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
 
@@ -554,8 +529,38 @@
             <h1>📄 Documents importants</h1>
             <p class="subtitle">Toutes vos informations et références en un coup d'œil</p>
           </div>
+          <button class="btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
         </div>
         <div id="documentsContainer"></div>
+
+        <!-- Assurance & Santé (saisie) -->
+        <div class="cards-grid" style="margin-top:1.5rem">
+          <div class="card">
+            <div class="card-header"><span class="card-icon">🏥</span><h2>Assurance &amp; Santé</h2></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Assurance voyage ?</label>
+                <select id="infoAssurance">
+                  <option value="non">Non</option>
+                  <option value="cb">Via carte bancaire</option>
+                  <option value="souscrite">Souscrite séparément</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Numéro d'urgence assurance</label>
+                <input type="text" id="infoAssuranceTel" placeholder="+33 1 XX XX XX XX"/>
+              </div>
+              <div class="form-group">
+                <label>Groupe sanguin</label>
+                <input type="text" id="infoGroupeSanguin" placeholder="A+, O-, B+…"/>
+              </div>
+              <div class="form-group">
+                <label>Allergies / médicaments</label>
+                <textarea id="infoMedicaments" rows="2" placeholder="Informations médicales importantes…"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ========== PAGE: À VISITER ========== -->
