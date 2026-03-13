@@ -1319,11 +1319,6 @@ function initDeplMap() {
   }
 }
 
-function _deplClearMarkers() {
-  _deplSearchMarkers.forEach(function(m) { m.setMap(null); });
-  _deplSearchMarkers = [];
-}
-
 function _deplShowNearby(latLng) {
   if (!_deplMap) return;
   var service = new google.maps.places.PlacesService(_deplMap);
@@ -1339,8 +1334,25 @@ function _deplShowNearby(latLng) {
   });
 }
 
+// Table d'index pour éviter l'injection de chaînes spéciales dans les onclick inline
+var _deplPlaceData = [];
+
+function _deplClearMarkers() {
+  _deplSearchMarkers.forEach(function(m) { m.setMap(null); });
+  _deplSearchMarkers = [];
+  _deplPlaceData = [];
+}
+
 function _deplPlaceMarker(place, idx) {
   if (!place.geometry) return;
+
+  // Stocker les données du lieu par index — évite tout problème d'encodage dans onclick
+  var dataIdx = _deplPlaceData.length;
+  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='
+    + encodeURIComponent(place.name + ' ' + (place.vicinity || ''))
+    + (place.place_id ? '&query_place_id=' + place.place_id : '');
+  _deplPlaceData.push({ placeId: place.place_id, name: place.name, mapsUrl: mapsUrl });
+
   var marker = new google.maps.Marker({
     position: place.geometry.location,
     map: _deplMap,
@@ -1350,14 +1362,11 @@ function _deplPlaceMarker(place, idx) {
   });
   _deplSearchMarkers.push(marker);
   marker.addListener('click', function() {
-    var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='
-      + encodeURIComponent(place.name + ' ' + (place.vicinity || ''))
-      + (place.place_id ? '&query_place_id=' + place.place_id : '');
     var content = '<div style="color:#111;font-size:13px;max-width:240px">'
       + '<b>🚗 ' + escHtml(place.name) + '</b><br>'
       + (place.vicinity ? '<span style="color:#555">' + escHtml(place.vicinity) + '</span><br>' : '')
       + (place.rating ? '⭐ ' + place.rating + '<br>' : '')
-      + '<button onclick="selectDeplPlace(\'' + place.place_id + '\',\'' + escHtml(place.name).replace(/'/g,"&#39;") + '\',\'' + encodeURIComponent(mapsUrl) + '\')" '
+      + '<button onclick="selectDeplPlace(' + dataIdx + ')" '
       + 'style="margin-top:7px;background:#1565C0;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">'
       + '🚗 Choisir ce loueur</button></div>';
     _deplInfoWindow.setContent(content);
@@ -1365,25 +1374,24 @@ function _deplPlaceMarker(place, idx) {
   });
 }
 
-function selectDeplPlace(placeId, name, encodedMapsUrl) {
-  if (!placeId) return;
+function selectDeplPlace(dataIdx) {
+  var data = _deplPlaceData[dataIdx];
+  if (!data) return;
   new google.maps.places.PlacesService(_deplMap).getDetails({
-    placeId: placeId, language: 'fr',
+    placeId: data.placeId, language: 'fr',
     fields: ['name','formatted_address','formatted_phone_number','website','geometry','place_id']
   }, function(detail, st) {
-    var place = (st === google.maps.places.PlacesServiceStatus.OK && detail) ? detail : { name: name };
-    var mapsUrl = decodeURIComponent(encodedMapsUrl);
+    var place = (st === google.maps.places.PlacesServiceStatus.OK && detail) ? detail : { name: data.name };
     var nomEl  = document.getElementById('infoLocationSociete');
     var lieuEl = document.getElementById('infoLocationLieu');
     var mapsEl = document.getElementById('infoLocationMaps');
-    if (nomEl)  nomEl.value  = place.name || name;
+    if (nomEl)  nomEl.value  = place.name || data.name;
     if (lieuEl) lieuEl.value = place.formatted_address || '';
-    if (mapsEl) mapsEl.value = mapsUrl;
+    if (mapsEl) mapsEl.value = data.mapsUrl;
     if (_deplInfoWindow) _deplInfoWindow.close();
-    toast('🚗 Loueur sélectionné : ' + (place.name || name), 'success');
-    // Auto-passer à oui pour location voiture
     var locEl = document.getElementById('infoLocationVoiture');
     if (locEl) locEl.value = 'oui';
+    toast('🚗 Loueur sélectionné : ' + (place.name || data.name), 'success');
   });
 }
 
