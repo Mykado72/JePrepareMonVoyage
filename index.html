@@ -174,6 +174,7 @@
               <div class="embedded-map-search-row">
                 <input type="text" id="hebMapSearch" placeholder="Recherchez votre hébergement (nom, adresse…)" autocomplete="off"/>
                 <button class="btn-icon" onclick="locateMeHeb()" title="Ma position">📍</button>
+                <button class="btn-icon btn-fullscreen-map" onclick="openMapFullscreen('hebGoogleMap')" title="Plein écran">⛶</button>
               </div>
               <div id="hebGoogleMap" class="embedded-map"></div>
               <p class="map-hint" id="hebMapHint">💡 Carte disponible une fois la ville renseignée — double-cliquez sur la carte pour afficher les marqueurs 🟡.</p>
@@ -286,21 +287,35 @@
                 <label>Date &amp; heure d'arrivée</label>
                 <input type="datetime-local" id="infoHeureArrivee"/>
               </div>
-              <div class="form-group">
-                <label>Référence / PNR</label>
-                <input type="text" id="infoPNRAller" placeholder="ABC123"/>
-              </div>
-              <div class="form-group">
-                <label>Compagnie / Opérateur</label>
-                <input type="text" id="infoCompagnieAller" placeholder="Air France, SNCF, Ryanair…"/>
-              </div>
-              <div class="form-group">
-                <label>Terminal / Voie / Quai</label>
-                <input type="text" id="infoTerminalAller" placeholder="Terminal 2E, Voie 12…"/>
-              </div>
-              <div class="form-group">
-                <label>Lien réservation / e-ticket</label>
-                <input type="url" id="infoLienTicketAller" placeholder="https://…"/>
+            </div>
+            <!-- Accordéon détails avancés -->
+            <div class="accordion" id="accordionAllerWrap">
+              <button class="accordion-toggle" onclick="toggleAccordion('accordionAller', this)" type="button">
+                <span>Détails avancés</span><span class="accordion-chevron">▾</span>
+              </button>
+              <div class="accordion-body" id="accordionAller">
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="form-group">
+                    <label>Référence / PNR</label>
+                    <input type="text" id="infoPNRAller" placeholder="ABC123"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Compagnie / Opérateur</label>
+                    <input type="text" id="infoCompagnieAller" placeholder="Air France, SNCF, Ryanair…"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Terminal / Voie / Quai</label>
+                    <input type="text" id="infoTerminalAller" placeholder="Terminal 2E, Voie 12…"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Lien réservation / e-ticket</label>
+                    <div class="url-input-wrap">
+                      <input type="url" id="infoLienTicketAller" placeholder="https://…"/>
+                      <button class="url-btn" onclick="pasteUrl('infoLienTicketAller')" title="Coller">📋</button>
+                      <button class="url-btn" onclick="openUrl('infoLienTicketAller')" title="Ouvrir">🔗</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -340,21 +355,34 @@
                 <label>Date &amp; heure d'arrivée</label>
                 <input type="datetime-local" id="infoHeureArriveeRetour"/>
               </div>
-              <div class="form-group">
-                <label>Référence / PNR</label>
-                <input type="text" id="infoPNRRetour" placeholder="ABC124"/>
-              </div>
-              <div class="form-group">
-                <label>Compagnie / Opérateur</label>
-                <input type="text" id="infoCompagnieRetour" placeholder="Air France, SNCF, Ryanair…"/>
-              </div>
-              <div class="form-group">
-                <label>Terminal / Voie / Quai</label>
-                <input type="text" id="infoTerminalRetour" placeholder="Terminal 2E, Voie 12…"/>
-              </div>
-              <div class="form-group">
-                <label>Lien réservation / e-ticket</label>
-                <input type="url" id="infoLienTicketRetour" placeholder="https://…"/>
+            </div>
+            <div class="accordion" id="accordionRetourWrap">
+              <button class="accordion-toggle" onclick="toggleAccordion('accordionRetour', this)" type="button">
+                <span>Détails avancés</span><span class="accordion-chevron">▾</span>
+              </button>
+              <div class="accordion-body" id="accordionRetour">
+                <div class="form-grid" style="margin-top:12px">
+                  <div class="form-group">
+                    <label>Référence / PNR</label>
+                    <input type="text" id="infoPNRRetour" placeholder="ABC124"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Compagnie / Opérateur</label>
+                    <input type="text" id="infoCompagnieRetour" placeholder="Air France, SNCF, Ryanair…"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Terminal / Voie / Quai</label>
+                    <input type="text" id="infoTerminalRetour" placeholder="Terminal 2E, Voie 12…"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Lien réservation / e-ticket</label>
+                    <div class="url-input-wrap">
+                      <input type="url" id="infoLienTicketRetour" placeholder="https://…"/>
+                      <button class="url-btn" onclick="pasteUrl('infoLienTicketRetour')" title="Coller">📋</button>
+                      <button class="url-btn" onclick="openUrl('infoLienTicketRetour')" title="Ouvrir">🔗</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -448,6 +476,7 @@
               <div class="embedded-map-search-row">
                 <input type="text" id="deplMapSearch" placeholder="Recherchez un loueur (Hertz, Europcar, Sixt…)" autocomplete="off"/>
                 <button class="btn-icon" onclick="locateMeDepl()" title="Ma position">📍</button>
+                <button class="btn-icon btn-fullscreen-map" onclick="openMapFullscreen('deplGoogleMap')" title="Plein écran">⛶</button>
               </div>
               <div id="deplGoogleMap" class="embedded-map"></div>
               <p class="map-hint" id="deplMapHint">💡 Cliquez sur la carte pour afficher les loueurs de véhicules 🟡 à proximité.</p>
@@ -627,6 +656,7 @@
           <div class="embedded-map-search-row">
             <input type="text" id="visiterMapSearch" placeholder="Recherchez un lieu (restaurant, monument, plage…)" autocomplete="off"/>
             <button class="btn-icon" onclick="locateMeVisiter()" title="Ma position">📍</button>
+            <button class="btn-icon btn-fullscreen-map" onclick="openMapFullscreen('visiterGoogleMap')" title="Plein écran">⛶</button>
           </div>
           <div id="visiterGoogleMap" class="embedded-map embedded-map--tall"></div>
           <p class="map-hint" id="visiterMapHint">💡 🟢 = hébergement · 🔵🟠🟣 = lieux sauvegardés — double-cliquez sur la carte pour ajouter un lieu.</p>
@@ -912,5 +942,39 @@
       }
     }
   </script>
+
+  <!-- ===== BOTTOM NAV BAR (mobile only) ===== -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bottom-nav-item active" data-page="infos" onclick="navigate('infos')">
+      <span class="bottom-nav-icon">🗺️</span>
+      <span class="bottom-nav-label">Infos</span>
+    </button>
+    <button class="bottom-nav-item" data-page="transports" onclick="navigate('transports')">
+      <span class="bottom-nav-icon">✈️</span>
+      <span class="bottom-nav-label">Transports</span>
+    </button>
+    <button class="bottom-nav-item" data-page="checklist" onclick="navigate('checklist')">
+      <span class="bottom-nav-icon">✅</span>
+      <span class="bottom-nav-label">Checklist</span>
+      <span class="bottom-nav-badge" id="bottomBadgeChecklist"></span>
+    </button>
+    <button class="bottom-nav-item" data-page="visiter" onclick="navigate('visiter')">
+      <span class="bottom-nav-icon">📍</span>
+      <span class="bottom-nav-label">À visiter</span>
+    </button>
+    <button class="bottom-nav-item" data-page="more" onclick="toggleSidebar()">
+      <span class="bottom-nav-icon">☰</span>
+      <span class="bottom-nav-label">Plus</span>
+    </button>
+  </nav>
+
+  <!-- ===== MAP FULLSCREEN OVERLAY ===== -->
+  <div class="map-fullscreen-overlay" id="mapFullscreenOverlay">
+    <div class="map-fullscreen-header">
+      <span class="map-fullscreen-title" id="mapFullscreenTitle">Carte</span>
+      <button class="map-fullscreen-close" onclick="closeMapFullscreen()">✕ Fermer</button>
+    </div>
+    <div class="map-fullscreen-body" id="mapFullscreenBody"></div>
+  </div>
 </body>
 </html>

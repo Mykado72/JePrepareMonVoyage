@@ -199,6 +199,7 @@ function navigate(page) {
   });
   var titleEl = document.getElementById('mobileTitle');
   if (titleEl) titleEl.textContent = PAGE_TITLES[page] || page;
+  _syncBottomNav(page);
   closeSidebar();
   closeDropdown();
 
@@ -249,7 +250,204 @@ function closeSidebar() {
   document.getElementById('sidebarOverlay').style.display = 'none';
 }
 
-// ── INFOS FIELDS ───────────────────────────────────────────
+// ── BOTTOM NAV — synchronisation active ────────────────────
+function _syncBottomNav(page) {
+  document.querySelectorAll('.bottom-nav-item').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
+}
+
+// ── ACCORDÉON DÉTAILS AVANCÉS ──────────────────────────────
+function toggleAccordion(bodyId, btn) {
+  var body = document.getElementById(bodyId);
+  if (!body) return;
+  var isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  if (btn) btn.classList.toggle('open', !isOpen);
+  // Forcer le re-trigger Google Maps si une carte est dans l'accordéon (rare mais propre)
+  if (!isOpen && window.google) {
+    setTimeout(function() {
+      if (_hebMap)     google.maps.event.trigger(_hebMap,     'resize');
+      if (_deplMap)    google.maps.event.trigger(_deplMap,    'resize');
+      if (_visiterMap) google.maps.event.trigger(_visiterMap, 'resize');
+    }, 310);
+  }
+}
+
+// Ouvre automatiquement les accordéons qui contiennent des données remplies
+function _openAccordionsWithData() {
+  var pairs = [
+    { body: 'accordionAller',  fields: ['infoPNRAller','infoCompagnieAller','infoTerminalAller','infoLienTicketAller'] },
+    { body: 'accordionRetour', fields: ['infoPNRRetour','infoCompagnieRetour','infoTerminalRetour','infoLienTicketRetour'] }
+  ];
+  pairs.forEach(function(p) {
+    var hasData = p.fields.some(function(id) {
+      var el = document.getElementById(id);
+      return el && el.value && el.value.trim() !== '';
+    });
+    var body = document.getElementById(p.body);
+    var btn  = body && body.previousElementSibling;
+    if (hasData && body && !body.classList.contains('open')) {
+      body.classList.add('open');
+      if (btn) btn.classList.add('open');
+    }
+  });
+}
+
+// ── CHAMPS URL : COLLER / OUVRIR ───────────────────────────
+function pasteUrl(inputId) {
+  if (!navigator.clipboard || !navigator.clipboard.readText) {
+    toast('Presse-papier non disponible sur ce navigateur', 'error');
+    return;
+  }
+  navigator.clipboard.readText().then(function(text) {
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    text = text.trim();
+    if (!text.startsWith('http')) {
+      toast('Le presse-papier ne contient pas une URL valide', 'error');
+      return;
+    }
+    el.value = text;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    haptic();
+    toast('📋 URL collée', 'success');
+  }).catch(function() {
+    toast('Impossible de lire le presse-papier', 'error');
+  });
+}
+
+function openUrl(inputId) {
+  var el = document.getElementById(inputId);
+  if (!el || !el.value) { toast('Aucune URL renseignée', 'error'); return; }
+  window.open(el.value, '_blank', 'noopener');
+}
+
+// ── HAPTIC FEEDBACK ────────────────────────────────────────
+function haptic(type) {
+  if (!navigator.vibrate) return;
+  if (type === 'heavy') navigator.vibrate([30, 10, 30]);
+  else if (type === 'error') navigator.vibrate([50, 30, 50]);
+  else navigator.vibrate(12); // léger par défaut
+}
+
+// ── CARTE PLEIN ÉCRAN ──────────────────────────────────────
+var _mapFullscreenOriginalParent = null;
+var _mapFullscreenOriginalEl     = null;
+
+function openMapFullscreen(mapDivId) {
+  var mapEl = document.getElementById(mapDivId);
+  if (!mapEl) return;
+
+  var overlay = document.getElementById('mapFullscreenOverlay');
+  var body    = document.getElementById('mapFullscreenBody');
+  var title   = document.getElementById('mapFullscreenTitle');
+
+  // Titre selon la carte
+  var titles = {
+    hebGoogleMap:     '🏨 Hébergement',
+    deplGoogleMap:    '🚗 Loueurs de véhicules',
+    visiterGoogleMap: '📍 À visiter'
+  };
+  if (title) title.textContent = titles[mapDivId] || 'Carte';
+
+  // Mémoriser la position d'origine
+  _mapFullscreenOriginalParent = mapEl.parentNode;
+  _mapFullscreenOriginalEl     = mapEl;
+
+  // Déplacer la div carte dans l'overlay
+  body.appendChild(mapEl);
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Forcer le resize après le paint
+  requestAnimationFrame(function() {
+    setTimeout(function() {
+      if (_hebMap     && mapDivId === 'hebGoogleMap')     google.maps.event.trigger(_hebMap,     'resize');
+      if (_deplMap    && mapDivId === 'deplGoogleMap')    google.maps.event.trigger(_deplMap,    'resize');
+      if (_visiterMap && mapDivId === 'visiterGoogleMap') google.maps.event.trigger(_visiterMap, 'resize');
+    }, 80);
+  });
+
+  haptic();
+}
+
+function closeMapFullscreen() {
+  var overlay = document.getElementById('mapFullscreenOverlay');
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+
+  // Remettre la carte à sa place d'origine
+  if (_mapFullscreenOriginalEl && _mapFullscreenOriginalParent) {
+    // Insérer avant le .map-hint (s'il existe) ou en dernier
+    var hint = _mapFullscreenOriginalParent.querySelector('.map-hint');
+    if (hint) {
+      _mapFullscreenOriginalParent.insertBefore(_mapFullscreenOriginalEl, hint);
+    } else {
+      _mapFullscreenOriginalParent.appendChild(_mapFullscreenOriginalEl);
+    }
+    _mapFullscreenOriginalEl     = null;
+    _mapFullscreenOriginalParent = null;
+  }
+
+  // Resize après remise en place
+  setTimeout(function() {
+    if (window.google) {
+      if (_hebMap)     google.maps.event.trigger(_hebMap,     'resize');
+      if (_deplMap)    google.maps.event.trigger(_deplMap,    'resize');
+      if (_visiterMap) google.maps.event.trigger(_visiterMap, 'resize');
+    }
+  }, 80);
+}
+
+// ── SWIPE SIDEBAR (mobile) ─────────────────────────────────
+(function() {
+  var _swipeStartX = null;
+  var _swipeStartY = null;
+  var EDGE = 30;  // zone de départ du swipe (px depuis le bord gauche)
+  var MIN_DIST = 60; // distance min pour valider le swipe
+
+  document.addEventListener('touchstart', function(e) {
+    _swipeStartX = e.touches[0].clientX;
+    _swipeStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function(e) {
+    if (_swipeStartX === null) return;
+    var dx = e.changedTouches[0].clientX - _swipeStartX;
+    var dy = e.changedTouches[0].clientY - _swipeStartY;
+
+    // Swipe horizontal dominant ?
+    if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+    var sb = document.getElementById('sidebar');
+    var isOpen = sb.classList.contains('open');
+
+    // Swipe droite depuis le bord gauche → ouvrir
+    if (!isOpen && dx > MIN_DIST && _swipeStartX < EDGE) {
+      toggleSidebar();
+      haptic();
+    }
+    // Swipe gauche quand sidebar ouverte → fermer
+    else if (isOpen && dx < -MIN_DIST) {
+      closeSidebar();
+      haptic();
+    }
+
+    _swipeStartX = null;
+    _swipeStartY = null;
+  }, { passive: true });
+})();
+
+// ── FERMER FULLSCREEN avec Escape ─────────────────────────
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var overlay = document.getElementById('mapFullscreenOverlay');
+    if (overlay && overlay.classList.contains('open')) closeMapFullscreen();
+  }
+});
+
+
 var INFO_FIELDS = [
   'infoPays','infoVille','infoDateDepart','infoDateRetour','infoNbVoyageurs',
   'infoTypeHebergement','infoNomHebergement','infoAdresseHebergement','infoTelHebergement',
@@ -406,6 +604,7 @@ function loadCurrentTrip() {
   updateBadges();
   updateTransportUI();
   updateDeplUI();
+  _openAccordionsWithData();
   var p = state.currentPage;
   if (p === 'checklist') refreshChecklist();
   else if (p === 'bagages') renderBagages();
@@ -448,11 +647,22 @@ function updateNuitsDisplay() {
 // ── BADGES ─────────────────────────────────────────────────
 function updateBadges() {
   var trip = currentTrip();
-  if (!trip) { clearBadge('badgeChecklist'); clearBadge('badgeBagages'); return; }
+  if (!trip) {
+    clearBadge('badgeChecklist'); clearBadge('badgeBagages');
+    _setBottomBadge('bottomBadgeChecklist', 0);
+    return;
+  }
   var clTodo = (trip.checklist || []).filter(function(i) { return !i.done; }).length;
   var bgTodo = (trip.bagages  || []).filter(function(i) { return !i.packed; }).length;
   setBadge('badgeChecklist', clTodo);
   setBadge('badgeBagages', bgTodo);
+  _setBottomBadge('bottomBadgeChecklist', clTodo);
+}
+function _setBottomBadge(id, n) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 9 ? '9+' : n; el.classList.add('visible'); }
+  else el.classList.remove('visible');
 }
 function setBadge(id, n) {
   var el = document.getElementById(id);
@@ -1391,6 +1601,7 @@ function selectDeplPlace(dataIdx) {
     if (_deplInfoWindow) _deplInfoWindow.close();
     var locEl = document.getElementById('infoLocationVoiture');
     if (locEl) locEl.value = 'oui';
+    haptic('heavy');
     toast('🚗 Loueur sélectionné : ' + (place.name || data.name), 'success');
   });
 }
@@ -1890,6 +2101,7 @@ function selectHebPlace(placeId) {
   }, function(place, st) {
     if (st !== google.maps.places.PlacesServiceStatus.OK || !place) return;
     _clearHebSearchMarkers();
+    haptic('heavy');
     _fillHebFromPlace(place);
   });
 }
@@ -2776,6 +2988,7 @@ function confirmAddLieu() {
     toast('📍 Lieu ajouté', 'success');
   }
   _editingLieuId = null;
+  haptic('heavy');
   save(); closeModal('modalAddLieu'); renderLieux();
 }
 
